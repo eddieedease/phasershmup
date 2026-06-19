@@ -1,0 +1,24 @@
+{
+  "name": "phasershmup",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "scripts": {
+    "start": "serve ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eddieedease/phasershmup.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/eddieedease/phasershmup/issues"
+  },
+  "homepage": "https://github.com/eddieedease/phasershmup#readme",
+  "devDependencies": {
+    "serve": "^14.2.6"
+  }
+}
