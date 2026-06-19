@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoDonClone</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #000; width: 100%; height: 100%; overflow: hidden; }
+    #game { width: 100%; height: 100%; }
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  </style>
+</head>
+<body><div id="game"></div>
+  <div id="err" style="color:#f55;font:14px monospace;padding:20px;position:fixed;top:0;left:0;z-index:9999;white-space:pre-wrap;display:none"></div>
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var d = document.getElementById('err');
+      d.style.display = 'block';
+      d.textContent = 'ERROR: ' + msg + '\n' + src + ':' + line + ':' + col + '\n' + (err && err.stack ? err.stack : '');
+    };
+    window.onunhandledrejection = function(e) {
+      var d = document.getElementById('err');
+      d.style.display = 'block';
+      d.textContent = 'UNHANDLED: ' + e.reason;
+    };
+  </script>
+  <script src="phaser.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
