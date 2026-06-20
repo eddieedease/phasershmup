@@ -499,7 +499,11 @@ class GameScene extends Phaser.Scene {
     this.bossHPLabel = this.add.text(W/2, H-28, '', { font:'11px monospace', fill:'#f8f' }).setOrigin(0.5,0).setDepth(20);
 
     this.updateHUD();
-    this.spawnWave();
+
+    // Show level title banner, then start waves
+    this.showBanner(`LEVEL ${State.level}  ${this.levelDef.title}`, '#fff', () => {
+      this.spawnWave();
+    });
   }
 
   update(time, delta) {
@@ -781,21 +785,30 @@ class GameOverScene extends Phaser.Scene {
     this.add.text(W/2, 200, 'LEVEL ' + State.level,
       { font:'14px monospace', fill:'#aaa' }).setOrigin(0.5);
 
-    // Name entry
+    // Name entry — 3 separate letter slots at known pixel positions
     this.add.text(W/2, 260, 'ENTER NAME (3 CHARS)', { font:'12px monospace', fill:'#888' }).setOrigin(0.5);
-    this.nameChars = ['A', 'A', 'A'];
+    this.nameChars  = ['A', 'A', 'A'];
     this.nameCursor = 0;
-    this.nameTxt = this.add.text(W/2, 290, 'A A A', { font:'24px monospace', fill:'#fff', letterSpacing: 8 }).setOrigin(0.5);
-    this.cursorImg = this.add.rectangle(W/2 - 16, 310, 12, 2, 0xffffff);
 
-    this.add.text(W/2, 360, '↑↓ CHANGE  →  NEXT  Z SAVE',
+    const SLOT_W  = 32; // px between slots
+    const SLOTS_X = [W/2 - SLOT_W, W/2, W/2 + SLOT_W];
+    const LETTER_Y = 290;
+
+    this.letterTxts = SLOTS_X.map((x, i) =>
+      this.add.text(x, LETTER_Y, 'A', { font:'24px monospace', fill:'#fff' }).setOrigin(0.5, 0).setDepth(30)
+    );
+    // Cursor bar sits just below the letters
+    this.cursorBar = this.add.rectangle(SLOTS_X[0], LETTER_Y + 30, SLOT_W - 4, 3, 0xffffff).setDepth(30);
+    this.slotX = SLOTS_X;
+
+    this.add.text(W/2, 360, '↑↓ CHANGE  ←→ MOVE  Z SAVE',
       { font:'10px monospace', fill:'#666' }).setOrigin(0.5);
 
     const cur = this.input.keyboard.createCursorKeys();
     const z   = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
 
-    cur.up.on('down', () => { this.nameChars[this.nameCursor] = String.fromCharCode((this.nameChars[this.nameCursor].charCodeAt(0) - 65 + 1) % 26 + 65); this.refreshName(); });
-    cur.down.on('down', () => { this.nameChars[this.nameCursor] = String.fromCharCode((this.nameChars[this.nameCursor].charCodeAt(0) - 65 + 25) % 26 + 65); this.refreshName(); });
+    cur.up.on('down',    () => { this.nameChars[this.nameCursor] = String.fromCharCode((this.nameChars[this.nameCursor].charCodeAt(0) - 65 + 1)  % 26 + 65); this.refreshName(); });
+    cur.down.on('down',  () => { this.nameChars[this.nameCursor] = String.fromCharCode((this.nameChars[this.nameCursor].charCodeAt(0) - 65 + 25) % 26 + 65); this.refreshName(); });
     cur.right.on('down', () => { if (this.nameCursor < 2) { this.nameCursor++; this.refreshName(); } });
     cur.left.on('down',  () => { if (this.nameCursor > 0) { this.nameCursor--; this.refreshName(); } });
     z.on('down', () => {
@@ -805,8 +818,11 @@ class GameOverScene extends Phaser.Scene {
   }
 
   refreshName() {
-    this.nameTxt.setText(this.nameChars.join(' '));
-    this.cursorImg.setX(W/2 - 16 + this.nameCursor * 24);
+    this.letterTxts.forEach((t, i) => {
+      t.setText(this.nameChars[i]);
+      t.setFill(i === this.nameCursor ? '#ff0' : '#fff');
+    });
+    this.cursorBar.setX(this.slotX[this.nameCursor]);
   }
 }
 
