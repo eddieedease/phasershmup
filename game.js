@@ -480,7 +480,7 @@ class GameScene extends Phaser.Scene {
     // Input
     this.cursors  = this.input.keyboard.createCursorKeys();
     this.fireKey  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
-    this.focusKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.focusKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
 
     // Collisions — power-ups use manual distance check in update (avoids physics callback corruption)
     const ba = (a, b) => a.active && b.active;
@@ -532,6 +532,8 @@ class GameScene extends Phaser.Scene {
       if (b.y < -20) b.destroy();
     for (const b of this.enemyBullets.getChildren())
       if (b.y > H+20 || b.x < -40 || b.x > W+40) b.destroy();
+    for (const e of this.enemies.getChildren())
+      if (e.y > H+80 || e.x < -100 || e.x > W+100) e.destroy();
     for (const p of this.powerups.getChildren())
       if (p.y > H+30) p.destroy();
 
