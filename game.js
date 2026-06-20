@@ -729,18 +729,21 @@ class GameScene extends Phaser.Scene {
     this.enemyBullets  = this.physics.add.group();
     this.powerups      = this.physics.add.group();
 
-    // Player
-    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
+    // Player — physics sprite (invisible: only drives the body + position)
+    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2).setAlpha(0.001);
     this.player.setCollideWorldBounds(true);
-    // Small centered hitbox — 12×12 square at the sprite center (DoDonPachi style)
     this.player.body.setSize(12, 12, true);
-    this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
-    this.laserBeam = this.add.graphics().setDepth(9);
 
-    // Wing-skew: Phaser canvas renderer ignores skewX property, so we patch
-    // renderCanvas to inject a shear (c component) into the transform matrix.
-    this.player._shear = 0;
-    this.player.renderCanvas = (renderer, src, camera, parentMatrix) => {
+    // Visual split: top half (nose) never shears; bottom half (wings) shears.
+    // Shear pivot is the sprite centre, so displacement is 0 at the seam and
+    // maximum at the wing tips — exactly "nose stays, wings sweep".
+    const tex = this.ship.texture;
+    this.playerTop = this.add.image(W/2, H - 80, tex).setDepth(10).setScale(2).setCrop(0, 0,  32, 16);
+    this.playerBot = this.add.image(W/2, H - 80, tex).setDepth(10).setScale(2).setCrop(0, 16, 32, 16);
+    this.playerBot._shear = 0;
+
+    // Patch bottom-half renderCanvas to inject a horizontal shear
+    const shearRender = (renderer, src, camera) => {
       if (src.width === 0 || src.height === 0) return;
       const alpha = camera.alpha * src.alpha;
       if (alpha === 0) return;
@@ -751,26 +754,26 @@ class GameScene extends Phaser.Scene {
       const cm = renderer._tempMatrix1;
       const calc = renderer._tempMatrix3;
       sm.applyITRS(src.x, src.y, src.rotation, src.scaleX, src.scaleY);
-      // Inject horizontal shear into the sprite matrix before camera multiply
       sm.c += (src._shear || 0) * sm.d;
       cm.copyFrom(camera.matrix);
       sm.e -= camera.scrollX * src.scrollFactorX;
       sm.f -= camera.scrollY * src.scrollFactorY;
       cm.multiply(sm, calc);
       const fw = frame.realWidth, fh = frame.realHeight, res = frame.source.resolution;
-      const fx = src.flipX ? -1 : 1, fy = src.flipY ? -1 : 1;
       let dx = -src.displayOriginX + frame.x;
       let dy = -src.displayOriginY + frame.y;
-      if (src.flipX) dx -= fw - src.displayOriginX * 2;
-      if (src.flipY) dy -= fh - src.displayOriginY * 2;
       ctx.save();
       calc.setToContext(ctx);
-      ctx.scale(fx / res, fy / res);
+      ctx.scale(1 / res, 1 / res);
       ctx.globalCompositeOperation = renderer.blendModes[src.blendMode];
       ctx.globalAlpha = alpha;
       ctx.drawImage(frame.source.image, cd.x, cd.y, fw * res, fh * res, dx, dy, fw, fh);
       ctx.restore();
     };
+    this.playerBot.renderCanvas = shearRender;
+
+    this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
+    this.laserBeam = this.add.graphics().setDepth(9);
 
     // Input
     this.cursors  = this.input.keyboard.createCursorKeys();
@@ -870,9 +873,13 @@ class GameScene extends Phaser.Scene {
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
 
-    // Wing skew — nose leads, wings trail; hitbox unaffected
+    // Sync visual halves to physics body
+    this.playerTop.setPosition(this.player.x, this.player.y);
+    this.playerBot.setPosition(this.player.x, this.player.y);
+
+    // Wings-only shear — bottom half shears, top (nose) stays fixed
     const targetShear = vx < 0 ? 0.22 : vx > 0 ? -0.22 : 0;
-    this.player._shear += (targetShear - this.player._shear) * 0.16;
+    this.playerBot._shear += (targetShear - this.playerBot._shear) * 0.16;
 
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
@@ -963,10 +970,14 @@ class GameScene extends Phaser.Scene {
     this.flashText(player.x, player.y - 30, '-1 LIFE', '#f00');
 
     // Red tint + rapid flash during invincibility
-    player.setTint(0xff4444);
+    this.playerTop.setTint(0xff4444);
+    this.playerBot.setTint(0xff4444);
     this.tweens.add({
-      targets: player, alpha: 0.2, duration: 80, yoyo: true, repeat: 14,
-      onComplete: () => { player.setAlpha(1); player.clearTint(); }
+      targets: [this.playerTop, this.playerBot], alpha: 0.2, duration: 80, yoyo: true, repeat: 14,
+      onComplete: () => {
+        this.playerTop.setAlpha(1).clearTint();
+        this.playerBot.setAlpha(1).clearTint();
+      }
     });
 
     if (this.lives <= 0) this.doGameOver();
@@ -1079,6 +1090,8 @@ class GameScene extends Phaser.Scene {
     playMusic(this, null);
     if (!victory) this.spawnExplosion(this.player.x, this.player.y, 'large');
     this.player.setVisible(false);
+    this.playerTop.setVisible(false);
+    this.playerBot.setVisible(false);
 
     this.time.delayedCall(700, () => {
       this.scene.start('GameOver', { victory });
