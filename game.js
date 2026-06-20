@@ -404,7 +404,7 @@ class BootScene extends Phaser.Scene {
       this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
     );
     // Music
-    this.load.audio('music_main',   'assets/Audio/levelbm/maintheme.m4a');
+    this.load.audio('music_main',   'assets/Audio/levelbm/maintheme.ogg');
     this.load.audio('music_level1', 'assets/Audio/levelbm/level1.ogg');
     this.load.audio('music_level2', 'assets/Audio/levelbm/level2.ogg');
     this.load.audio('music_level3', 'assets/Audio/levelbm/level3.ogg');
