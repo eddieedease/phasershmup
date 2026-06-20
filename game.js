@@ -124,11 +124,6 @@ function spawnEnemy(scene, x, y, cfg) {
   e.hp      = cfg.hp     || 3;
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
-  // Gentle random spin — heavier ships spin slower
-  e.spinSpeed = (Math.random() < 0.5 ? -1 : 1) * Phaser.Math.FloatBetween(
-    cfg.texture === 'ship_0015' ? 10 : 30,
-    cfg.texture === 'ship_0015' ? 25 : 65
-  );
   e.body.allowGravity = false;
   e.body.setSize(20, 20, true); // smaller than the 32×32 sprite for fair hitboxes
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
@@ -789,7 +784,11 @@ class GameScene extends Phaser.Scene {
       if (b.y > H+20 || b.x < -40 || b.x > W+40) b.destroy();
     for (const e of this.enemies.getChildren()) {
       if (e.y > H+80 || e.x < -100 || e.x > W+100) { e.destroy(); continue; }
-      if (!e.isBoss && e.spinSpeed) e.angle += e.spinSpeed * (delta / 1000);
+      // Rotate nose toward player (sprite faces down at rotation=0 due to flipY)
+      if (!e.isBoss && this.player && this.player.active) {
+        const targetRot = Phaser.Math.Angle.Between(e.x, e.y, this.player.x, this.player.y) - Math.PI / 2;
+        e.rotation = Phaser.Math.Angle.RotateTo(e.rotation, targetRot, 0.06);
+      }
     }
     for (const p of this.powerups.getChildren())
       if (p.y > H+30) p.destroy();
