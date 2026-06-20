@@ -781,7 +781,7 @@ class GameScene extends Phaser.Scene {
     // Player
     this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(7, 7, true);
+    this.player.body.setSize(4, 4, true);
 
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
