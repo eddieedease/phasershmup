@@ -697,6 +697,10 @@ class ShipSelectScene extends Phaser.Scene {
       this.sound.mute = !this.sound.mute;
       this.muteLabel.setText(this.sound.mute ? '🔇 M' : '');
     });
+    this.input.keyboard.on('keydown-F', () => {
+      if (this.scale.isFullscreen) this.scale.stopFullscreen();
+      else this.scale.startFullscreen();
+    });
 
     this.cards = SHIPS.map((ship, i) => this.makeCard(ship, i));
     this.highlight();
@@ -793,6 +797,10 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-M', () => {
       this.sound.mute = !this.sound.mute;
       this.updateMuteLabel();
+    });
+    this.input.keyboard.on('keydown-F', () => {
+      if (this.scale.isFullscreen) this.scale.stopFullscreen();
+      else this.scale.startFullscreen();
     });
 
     // Collisions — power-ups use manual distance check in update (avoids physics callback corruption)
