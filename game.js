@@ -729,48 +729,48 @@ class GameScene extends Phaser.Scene {
     this.enemyBullets  = this.physics.add.group();
     this.powerups      = this.physics.add.group();
 
-    // Player — physics sprite (invisible: only drives the body + position)
-    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2).setAlpha(0.001);
+    // Player
+    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
     this.player.body.setSize(12, 12, true);
+    this.player._shear = 0;
 
-    // Visual split: top half (nose) never shears; bottom half (wings) shears.
-    // Shear pivot is the sprite centre, so displacement is 0 at the seam and
-    // maximum at the wing tips — exactly "nose stays, wings sweep".
-    const tex = this.ship.texture;
-    this.playerTop = this.add.image(W/2, H - 80, tex).setDepth(10).setScale(2).setCrop(0, 0,  32, 16);
-    this.playerBot = this.add.image(W/2, H - 80, tex).setDepth(10).setScale(2).setCrop(0, 16, 32, 16);
-    this.playerBot._shear = 0;
-
-    // Patch bottom-half renderCanvas to inject a horizontal shear
-    const shearRender = (renderer, src, camera) => {
-      if (src.width === 0 || src.height === 0) return;
+    // Wing-shear via two drawImage calls in one renderCanvas override.
+    // Texture is 32×32; in local draw space origin is (0,0), so:
+    //   top half  (rows 0-15)  → dst y: -16 to  0  (nose — NO shear)
+    //   bottom half (rows 16-31)→ dst y:   0 to 16  (wings — shear applied)
+    // Shear displacement at local y=0 (seam) = 0; at y=+16 (tips) = _shear*32.
+    // Nose stays exactly at player.x → bullets/laser always look correct.
+    this.player.renderCanvas = (renderer, src, camera) => {
       const alpha = camera.alpha * src.alpha;
       if (alpha === 0) return;
       const ctx = renderer.currentContext;
-      const frame = src.frame;
-      const cd = frame.canvasData;
-      const sm = renderer._tempMatrix2;
-      const cm = renderer._tempMatrix1;
-      const calc = renderer._tempMatrix3;
-      sm.applyITRS(src.x, src.y, src.rotation, src.scaleX, src.scaleY);
-      sm.c += (src._shear || 0) * sm.d;
-      cm.copyFrom(camera.matrix);
-      sm.e -= camera.scrollX * src.scrollFactorX;
-      sm.f -= camera.scrollY * src.scrollFactorY;
-      cm.multiply(sm, calc);
-      const fw = frame.realWidth, fh = frame.realHeight, res = frame.source.resolution;
-      let dx = -src.displayOriginX + frame.x;
-      let dy = -src.displayOriginY + frame.y;
-      ctx.save();
-      calc.setToContext(ctx);
-      ctx.scale(1 / res, 1 / res);
-      ctx.globalCompositeOperation = renderer.blendModes[src.blendMode];
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(frame.source.image, cd.x, cd.y, fw * res, fh * res, dx, dy, fw, fh);
-      ctx.restore();
+      const img = src.frame.source.image;
+      const res = src.frame.source.resolution;
+      const sm = renderer._tempMatrix2, cm = renderer._tempMatrix1, calc = renderer._tempMatrix3;
+      const blend = renderer.blendModes[src.blendMode];
+      const shear = src._shear || 0;
+
+      const half = (shearAmt, srcY) => {
+        sm.applyITRS(src.x, src.y, src.rotation, src.scaleX, src.scaleY);
+        if (shearAmt) sm.c += shearAmt * sm.d;
+        cm.copyFrom(camera.matrix);
+        sm.e -= camera.scrollX * src.scrollFactorX;
+        sm.f -= camera.scrollY * src.scrollFactorY;
+        cm.multiply(sm, calc);
+        ctx.save();
+        calc.setToContext(ctx);
+        ctx.scale(1 / res, 1 / res);
+        ctx.globalCompositeOperation = blend;
+        ctx.globalAlpha = alpha;
+        // src 32×16 slice, dst in local texture-px coords (-16..+16 range)
+        ctx.drawImage(img, 0, srcY * res, 32 * res, 16 * res, -16, srcY - 16, 32, 16);
+        ctx.restore();
+      };
+
+      half(0,     0);  // top half: no shear, rows 0-15
+      half(shear, 16); // bottom half: wings, rows 16-31
     };
-    this.playerBot.renderCanvas = shearRender;
 
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
@@ -873,13 +873,9 @@ class GameScene extends Phaser.Scene {
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
 
-    // Sync visual halves to physics body
-    this.playerTop.setPosition(this.player.x, this.player.y);
-    this.playerBot.setPosition(this.player.x, this.player.y);
-
     // Wings-only shear — bottom half shears, top (nose) stays fixed
     const targetShear = vx < 0 ? 0.22 : vx > 0 ? -0.22 : 0;
-    this.playerBot._shear += (targetShear - this.playerBot._shear) * 0.16;
+    this.player._shear += (targetShear - this.player._shear) * 0.16;
 
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
@@ -970,14 +966,12 @@ class GameScene extends Phaser.Scene {
     this.flashText(player.x, player.y - 30, '-1 LIFE', '#f00');
 
     // Red tint + rapid flash during invincibility
-    this.playerTop.setTint(0xff4444);
-    this.playerBot.setTint(0xff4444);
+    // Red flash overlay (tint via sprite not available with custom renderCanvas)
+    const flashRect = this.add.rectangle(player.x, player.y, 68, 68, 0xff2222, 0.65).setDepth(12);
+    this.tweens.add({ targets: flashRect, alpha: 0, duration: 320, onComplete: () => flashRect.destroy() });
     this.tweens.add({
-      targets: [this.playerTop, this.playerBot], alpha: 0.2, duration: 80, yoyo: true, repeat: 14,
-      onComplete: () => {
-        this.playerTop.setAlpha(1).clearTint();
-        this.playerBot.setAlpha(1).clearTint();
-      }
+      targets: this.player, alpha: 0.15, duration: 80, yoyo: true, repeat: 14,
+      onComplete: () => this.player.setAlpha(1)
     });
 
     if (this.lives <= 0) this.doGameOver();
@@ -1090,8 +1084,6 @@ class GameScene extends Phaser.Scene {
     playMusic(this, null);
     if (!victory) this.spawnExplosion(this.player.x, this.player.y, 'large');
     this.player.setVisible(false);
-    this.playerTop.setVisible(false);
-    this.playerBot.setVisible(false);
 
     this.time.delayedCall(700, () => {
       this.scene.start('GameOver', { victory });
@@ -1273,6 +1265,7 @@ class HighscoreScene extends Phaser.Scene {
       });
     }
 
+    this.add.text(W/2, H - 56, '😢  Too bad! Local highscores only.', { font:'8px monospace', fill:'#445566' }).setOrigin(0.5);
     this.add.text(W/2, H - 40, 'Z — PLAY AGAIN', { font:'13px monospace', fill:'#aaa' }).setOrigin(0.5);
     this.input.keyboard.once('keydown-Z', () => this.scene.start('ShipSelect'));
   }
