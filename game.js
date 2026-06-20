@@ -31,7 +31,7 @@ const SHIPS = [
     color: 0x4488ff,
     speed: 240,
     focusSpeed: 110,
-    texture: 'ship_a',
+    texture: 'ship_0000',
     fireRate: 90,
     fire(scene, px, py, lvl) {
       const spread = Math.min(lvl, 4);
@@ -47,7 +47,7 @@ const SHIPS = [
     color: 0xffaa00,
     speed: 310,
     focusSpeed: 140,
-    texture: 'ship_b',
+    texture: 'ship_0003',
     fireRate: 60,
     fire(scene, px, py, lvl) {
       spawnPlayerBullet(scene, px, py, -90, 700);
@@ -66,7 +66,7 @@ const SHIPS = [
     color: 0xff4466,
     speed: 180,
     focusSpeed: 80,
-    texture: 'ship_c',
+    texture: 'ship_0001',
     fireRate: 140,
     fire(scene, px, py, lvl) {
       const count = 3 + lvl * 2;
@@ -108,8 +108,10 @@ function spawnLaser(scene, x, y, angleDeg, damage) {
 }
 
 function spawnEnemy(scene, x, y, cfg) {
-  const e = scene.enemies.create(x, y, cfg.texture || 'enemy_a');
+  const e = scene.enemies.create(x, y, cfg.texture || 'ship_0012');
   e.setDepth(7);
+  e.setFlipY(true);   // grey sprites face up by default; flip to face player
+  e.setScale(cfg.scale || 1.5);
   e.hp      = cfg.hp     || 3;
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
@@ -192,7 +194,7 @@ const LEVELS = [
     title: 'SECTOR 1',
     bgTint: 0x000011,
     nebulaTint: null,
-    overlayColor: 0x000033, overlayAlpha: 0
+    overlayColor: 0x000033, overlayAlpha: 0,
     waves: [
       s => {
         for (let i = 0; i < 5; i++) s.time.delayedCall(i * 350, () => {
@@ -207,7 +209,7 @@ const LEVELS = [
       },
       s => {
         for (let i = 0; i < 3; i++) s.time.delayedCall(i * 600, () => {
-          spawnEnemy(s, 120 + i*120, -40, { texture:'enemy_b', hp:5, points:250, vy:50, pattern:P.radial8, patternDelay:1400 });
+          spawnEnemy(s, 120 + i*120, -40, { texture:'ship_0015', hp:5, points:250, vy:50, pattern:P.radial8, patternDelay:1400 });
         });
       },
     ],
@@ -224,7 +226,7 @@ const LEVELS = [
     title: 'NEBULA CROSS',
     bgTint: 0x000820,
     nebulaTint: 0x88bbff,
-    overlayColor: 0x0044cc, overlayAlpha: 0.28
+    overlayColor: 0x0044cc, overlayAlpha: 0.28,
     waves: [
       s => {
         for (let i = 0; i < 6; i++) s.time.delayedCall(i * 280, () => {
@@ -233,7 +235,7 @@ const LEVELS = [
       },
       s => {
         for (let i = 0; i < 4; i++) s.time.delayedCall(i * 500, () => {
-          spawnEnemy(s, 80 + i*100, -30, { texture:'enemy_b', hp:6, points:300, vy:40, pattern:P.radial8, patternDelay:1200 });
+          spawnEnemy(s, 80 + i*100, -30, { texture:'ship_0015', hp:6, points:300, vy:40, pattern:P.radial8, patternDelay:1200 });
         });
       },
       s => {
@@ -243,7 +245,7 @@ const LEVELS = [
       },
       s => {
         for (let i = 0; i < 3; i++) s.time.delayedCall(i * 700, () => {
-          spawnEnemy(s, 80 + i*160, -40, { texture:'enemy_b', hp:7, points:350, vy:35, pattern:P.spiral, patternDelay:220 });
+          spawnEnemy(s, 80 + i*160, -40, { texture:'ship_0015', hp:7, points:350, vy:35, pattern:P.spiral, patternDelay:220 });
         });
       },
     ],
@@ -260,7 +262,7 @@ const LEVELS = [
     title: 'VOID GATE',
     bgTint: 0x100008,
     nebulaTint: 0xff6688,
-    overlayColor: 0x880011, overlayAlpha: 0.32
+    overlayColor: 0x880011, overlayAlpha: 0.32,
     waves: [
       s => {
         for (let i = 0; i < 8; i++) s.time.delayedCall(i * 250, () => {
@@ -269,8 +271,8 @@ const LEVELS = [
       },
       s => {
         for (let i = 0; i < 4; i++) s.time.delayedCall(i * 400, () => {
-          spawnEnemy(s, 70, -30, { texture:'enemy_b', hp:8, points:400, vx:40, vy:60, pattern:P.crossAim, patternDelay:1100 });
-          spawnEnemy(s, W-70, -30, { texture:'enemy_b', hp:8, points:400, vx:-40, vy:60, pattern:P.crossAim, patternDelay:1100 });
+          spawnEnemy(s, 70, -30, { texture:'ship_0015', hp:8, points:400, vx:40, vy:60, pattern:P.crossAim, patternDelay:1100 });
+          spawnEnemy(s, W-70, -30, { texture:'ship_0015', hp:8, points:400, vx:-40, vy:60, pattern:P.crossAim, patternDelay:1100 });
         });
       },
       s => {
@@ -278,7 +280,7 @@ const LEVELS = [
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:70, pattern:P.radial8, patternDelay:1000 });
         });
         s.time.delayedCall(1200, () => {
-          spawnEnemy(s, W/2, -50, { texture:'enemy_b', hp:12, points:600, vy:35, pattern:P.radial12, patternDelay:900 });
+          spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:12, points:600, vy:35, pattern:P.radial12, patternDelay:900 });
         });
       },
     ],
@@ -293,8 +295,8 @@ const LEVELS = [
 
 // ─── Boss spawner ─────────────────────────────────────────────────────────────
 function spawnBoss(scene, cfg) {
-  const boss = scene.enemies.create(W/2, -80, 'enemy_boss');
-  boss.setDepth(7).setScale(1.4);
+  const boss = scene.enemies.create(W/2, -80, 'ship_0022');
+  boss.setDepth(7).setScale(3.2).setFlipY(true);
   boss.hp      = cfg.hp;
   boss.maxHp   = cfg.hp;
   boss.points  = cfg.points;
@@ -383,6 +385,14 @@ class BootScene extends Phaser.Scene {
   preload() {
     this.load.image('bg_stars',  'assets/bg2.jpg');
     this.load.image('bg_nebula', 'assets/bg1.png');
+    // Player ships — coloured sprites (0000=cyan, 0001=orange, 0003=yellow)
+    ['0000','0001','0003'].forEach(n =>
+      this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
+    );
+    // Enemy ships — grey sprites
+    ['0012','0015','0019','0022'].forEach(n =>
+      this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
+    );
   }
 
   create() {
@@ -450,7 +460,8 @@ class GameScene extends Phaser.Scene {
   create() {
     this.gameOver     = false;
     this.bossActive   = false;
-    this.wavesEnabled = false; // held until level banner finishes
+    this.wavesEnabled  = false; // held until level banner finishes
+    this.waveSpawning  = false; // true while delayedCall spawns are still in flight
     this.invincible   = 0;
     this.lives        = State.lives;
     this.shotCooldown  = 0;
@@ -482,9 +493,10 @@ class GameScene extends Phaser.Scene {
     this.powerups      = this.physics.add.group();
 
     // Player
-    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10);
+    this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
-    this.player.setTint(this.ship.color);
+    // Small circular hitbox centred on ship (DoDonPachi style)
+    this.player.body.setCircle(5, 27, 27);
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
 
@@ -529,7 +541,8 @@ class GameScene extends Phaser.Scene {
     // Wave progression — guarded by wavesEnabled so the level banner
     // can't race with the first spawnWave call
     this.waveTimer += delta;
-    if (this.wavesEnabled && !this.bossActive && this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
+    if (this.wavesEnabled && !this.bossActive && !this.waveSpawning &&
+        this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
       this.spawnWave();
     }
 
@@ -650,7 +663,7 @@ class GameScene extends Phaser.Scene {
     player.setTint(0xff4444);
     this.tweens.add({
       targets: player, alpha: 0.2, duration: 80, yoyo: true, repeat: 14,
-      onComplete: () => { player.setAlpha(1); player.clearTint(); player.setTint(this.ship.color); }
+      onComplete: () => { player.setAlpha(1); player.clearTint(); }
     });
 
     if (this.lives <= 0) this.doGameOver();
@@ -683,7 +696,12 @@ class GameScene extends Phaser.Scene {
   // ── Level flow ────────────────────────────────────────────────────────────
 
   spawnWave() {
-    this.waveTimer = 0;
+    this.waveTimer    = 0;
+    this.waveSpawning = true;
+    // Hold the "no enemies" check for 2 s — long enough for all delayedCall
+    // spawns to fire (max spawn delay across all waves is ~1400 ms)
+    this.time.delayedCall(2000, () => { this.waveSpawning = false; });
+
     const waves = this.levelDef.waves;
 
     if (this.waveIdx < waves.length) {
@@ -885,29 +903,7 @@ class HighscoreScene extends Phaser.Scene {
 function makeTextures(scene) {
   const g = scene.make.graphics({ x:0, y:0, add:false });
 
-  // Ship A – Valkyrie (blue triangle)
-  g.clear();
-  g.fillStyle(0x4488ff); g.fillTriangle(16,0, 32,36, 0,36);
-  g.fillStyle(0x88ccff); g.fillTriangle(16,4, 28,32, 4,32);
-  g.fillStyle(0xffffff); g.fillRect(14,28,4,8);
-  g.fillStyle(0x00ffff,0.8); g.fillEllipse(16,38,10,6);
-  g.generateTexture('ship_a', 32, 40);
-
-  // Ship B – Thunderbolt (sleek orange)
-  g.clear();
-  g.fillStyle(0xffaa00); g.fillTriangle(18,0, 36,32, 0,32);
-  g.fillStyle(0xffdd88); g.fillTriangle(18,4, 30,28, 6,28);
-  g.fillStyle(0xffaa00); g.fillRect(0,18,8,10); g.fillRect(28,18,8,10);
-  g.fillStyle(0xff6600,0.8); g.fillEllipse(18,34,10,6);
-  g.generateTexture('ship_b', 36, 36);
-
-  // Ship C – Devastator (wide red)
-  g.clear();
-  g.fillStyle(0xff4466); g.fillTriangle(22,0, 44,38, 0,38);
-  g.fillStyle(0xff8899); g.fillTriangle(22,4, 38,34, 6,34);
-  g.fillStyle(0xff4466); g.fillRect(0,14,10,20); g.fillRect(34,14,10,20);
-  g.fillStyle(0xff0044); g.fillEllipse(22,40,14,7);
-  g.generateTexture('ship_c', 44, 42);
+  // Player ships are now loaded from assets/Ships/ — no procedural generation needed
 
   // Hitbox
   g.clear(); g.fillStyle(0xffffff); g.fillCircle(4,4,2);
@@ -925,30 +921,7 @@ function makeTextures(scene) {
   g.clear(); g.fillStyle(0xff3300); g.fillCircle(4,4,4); g.fillStyle(0xff9900,0.7); g.fillCircle(4,4,2);
   g.generateTexture('bullet_e', 8, 8);
 
-  // Enemy A
-  g.clear();
-  g.fillStyle(0xaa2222); g.fillTriangle(14,36, 28,0, 0,0);
-  g.fillStyle(0xff5555); g.fillTriangle(14,30, 24,4, 4,4);
-  g.fillStyle(0xffaa00); g.fillCircle(14,16,5);
-  g.generateTexture('enemy_a', 28, 38);
-
-  // Enemy B
-  g.clear();
-  g.fillStyle(0x882266); g.fillRect(4,4,28,20);
-  g.fillStyle(0xcc44aa); g.fillRect(8,8,20,12);
-  g.fillStyle(0xffaa00); g.fillCircle(18,14,6);
-  g.fillStyle(0xaa2255); g.fillRect(0,8,6,12); g.fillRect(30,8,6,12);
-  g.generateTexture('enemy_b', 36, 28);
-
-  // Boss
-  g.clear();
-  g.fillStyle(0x441144); g.fillRect(8,4,48,44);
-  g.fillStyle(0x882288); g.fillRect(12,8,40,36);
-  g.fillStyle(0xff44ff); g.fillCircle(32,26,14);
-  g.fillStyle(0xffaaff); g.fillCircle(32,26,8);
-  g.fillStyle(0xffffff); g.fillCircle(32,26,3);
-  g.fillStyle(0x441144); g.fillRect(0,16,10,24); g.fillRect(54,16,10,24);
-  g.generateTexture('enemy_boss', 64, 52);
+  // Enemy ships are now loaded from assets/Ships/ — no procedural generation needed
 
   // Power-up: power (yellow diamond)
   g.clear(); g.fillStyle(0xffcc00);
