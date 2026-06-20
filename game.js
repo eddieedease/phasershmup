@@ -125,6 +125,7 @@ function spawnEnemy(scene, x, y, cfg) {
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
   e.body.allowGravity = false;
+  e.body.setSize(20, 20, true); // smaller than the 32×32 sprite for fair hitboxes
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
   if (cfg.tint) e.setTint(cfg.tint);
   if (cfg.scale) e.setScale(cfg.scale);
@@ -526,9 +527,11 @@ class GameScene extends Phaser.Scene {
     // Player
     this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
-    // Small circular hitbox centred on ship (DoDonPachi style)
-    this.player.body.setCircle(5, 27, 27);
-    this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
+    // Tiny cockpit hitbox — 4px radius at the nose of the ship (scale-corrected)
+    // halfWidth = floor(r * scaleX) = 8 game-px collision radius
+    // center = (sprite.x, sprite.y - 12) — top-centre of the 64×64 display sprite
+    this.player.body.setCircle(4, 24, 12);
+    this.hitbox = this.add.image(W/2, H - 80 - 12, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
 
     // Input
@@ -622,7 +625,7 @@ class GameScene extends Phaser.Scene {
     const vx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0) * spd;
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
-    this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
+    this.hitbox.setPosition(this.player.x, this.player.y - 12).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
     // Shooting
