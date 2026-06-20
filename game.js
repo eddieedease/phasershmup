@@ -124,6 +124,11 @@ function spawnEnemy(scene, x, y, cfg) {
   e.hp      = cfg.hp     || 3;
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
+  // Gentle random spin — heavier ships spin slower
+  e.spinSpeed = (Math.random() < 0.5 ? -1 : 1) * Phaser.Math.FloatBetween(
+    cfg.texture === 'ship_0015' ? 10 : 30,
+    cfg.texture === 'ship_0015' ? 25 : 65
+  );
   e.body.allowGravity = false;
   e.body.setSize(20, 20, true); // smaller than the 32×32 sprite for fair hitboxes
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
@@ -782,8 +787,10 @@ class GameScene extends Phaser.Scene {
       if (b.y < -20) b.destroy();
     for (const b of this.enemyBullets.getChildren())
       if (b.y > H+20 || b.x < -40 || b.x > W+40) b.destroy();
-    for (const e of this.enemies.getChildren())
-      if (e.y > H+80 || e.x < -100 || e.x > W+100) e.destroy();
+    for (const e of this.enemies.getChildren()) {
+      if (e.y > H+80 || e.x < -100 || e.x > W+100) { e.destroy(); continue; }
+      if (!e.isBoss && e.spinSpeed) e.angle += e.spinSpeed * (delta / 1000);
+    }
     for (const p of this.powerups.getChildren())
       if (p.y > H+30) p.destroy();
 
@@ -804,6 +811,11 @@ class GameScene extends Phaser.Scene {
     const vx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0) * spd;
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
+
+    // Visual bank — smoothly tilt toward movement direction; hitbox unaffected
+    const targetAngle = vx < 0 ? -18 : vx > 0 ? 18 : 0;
+    this.player.angle += (targetAngle - this.player.angle) * 0.18;
+
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
