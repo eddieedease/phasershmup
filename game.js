@@ -48,7 +48,7 @@ const SHIPS = [
       for (let i = 0; i <= spread; i++) angles.push(-spread * 8 + i * 16);
       angles.forEach(ang => spawnPlayerBullet(scene, px, py, ang - 90, 620));
     },
-    laser(scene, px, py) { spawnLaser(scene, px, py, 0, 2); }
+    laser(scene, px, py, dmg) { spawnLaser(scene, px, py, 0, dmg || 2); }
   },
   {
     name: 'THUNDERBOLT',
@@ -64,9 +64,9 @@ const SHIPS = [
       if (lvl >= 2) { spawnPlayerBullet(scene, px - 16, py + 8, -80, 600); spawnPlayerBullet(scene, px + 16, py + 8, -100, 600); }
       if (lvl >= 3) { spawnPlayerBullet(scene, px - 22, py + 10, -75, 580); spawnPlayerBullet(scene, px + 22, py + 10, -105, 580); }
     },
-    laser(scene, px, py) {
-      spawnLaser(scene, px - 10, py, 0, 2);
-      spawnLaser(scene, px + 10, py, 0, 2);
+    laser(scene, px, py, dmg) {
+      spawnLaser(scene, px - 10, py, 0, dmg || 2);
+      spawnLaser(scene, px + 10, py, 0, dmg || 2);
     }
   },
   {
@@ -86,10 +86,10 @@ const SHIPS = [
         b.damage = 2;
       }
     },
-    laser(scene, px, py) {
-      spawnLaser(scene, px, py, 0, 3);
-      spawnLaser(scene, px - 12, py + 6, -5, 2);
-      spawnLaser(scene, px + 12, py + 6, 5, 2);
+    laser(scene, px, py, dmg) {
+      spawnLaser(scene, px, py, 0, (dmg || 2) + 1);
+      spawnLaser(scene, px - 12, py + 6, -5, dmg || 2);
+      spawnLaser(scene, px + 12, py + 6, 5, dmg || 2);
     }
   }
 ];
@@ -206,18 +206,18 @@ const LEVELS = [
     overlayColor: 0x000033, overlayAlpha: 0,
     waves: [
       s => {
-        for (let i = 0; i < 5; i++) s.time.delayedCall(i * 350, () => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:80, pattern:P.aimed1, patternDelay:1600 });
         });
       },
       s => {
-        for (let i = 0; i < 4; i++) s.time.delayedCall(i * 400, () => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 400, () => {
           spawnEnemy(s, 70, -30, { hp:3, points:120, vx:35, vy:70, pattern:P.aimed1, patternDelay:1300 });
           spawnEnemy(s, W-70, -30, { hp:3, points:120, vx:-35, vy:70, pattern:P.aimed1, patternDelay:1300 });
         });
       },
       s => {
-        for (let i = 0; i < 3; i++) s.time.delayedCall(i * 600, () => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 600, () => {
           spawnEnemy(s, 120 + i*120, -40, { texture:'ship_0015', hp:5, points:250, vy:50, pattern:P.radial8, patternDelay:1400 });
         });
       },
@@ -238,22 +238,22 @@ const LEVELS = [
     overlayColor: 0x0044cc, overlayAlpha: 0.28,
     waves: [
       s => {
-        for (let i = 0; i < 6; i++) s.time.delayedCall(i * 280, () => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 280, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1200 });
         });
       },
       s => {
-        for (let i = 0; i < 4; i++) s.time.delayedCall(i * 500, () => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 500, () => {
           spawnEnemy(s, 80 + i*100, -30, { texture:'ship_0015', hp:6, points:300, vy:40, pattern:P.radial8, patternDelay:1200 });
         });
       },
       s => {
-        for (let i = 0; i < 5; i++) s.time.delayedCall(i * 350, () => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:80, pattern:P.vShape, patternDelay:1300 });
         });
       },
       s => {
-        for (let i = 0; i < 3; i++) s.time.delayedCall(i * 700, () => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 700, () => {
           spawnEnemy(s, 80 + i*160, -40, { texture:'ship_0015', hp:7, points:350, vy:35, pattern:P.spiral, patternDelay:220 });
         });
       },
@@ -274,21 +274,21 @@ const LEVELS = [
     overlayColor: 0x880011, overlayAlpha: 0.32,
     waves: [
       s => {
-        for (let i = 0; i < 8; i++) s.time.delayedCall(i * 250, () => {
+        for (let i = 0; i < 8; i++) s.queueSpawn(i * 250, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:180, vy:100, pattern:P.aimed3, patternDelay:1000 });
         });
       },
       s => {
-        for (let i = 0; i < 4; i++) s.time.delayedCall(i * 400, () => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 400, () => {
           spawnEnemy(s, 70, -30, { texture:'ship_0015', hp:8, points:400, vx:40, vy:60, pattern:P.crossAim, patternDelay:1100 });
           spawnEnemy(s, W-70, -30, { texture:'ship_0015', hp:8, points:400, vx:-40, vy:60, pattern:P.crossAim, patternDelay:1100 });
         });
       },
       s => {
-        for (let i = 0; i < 5; i++) s.time.delayedCall(i * 400, () => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 400, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:70, pattern:P.radial8, patternDelay:1000 });
         });
-        s.time.delayedCall(1200, () => {
+        s.queueSpawn(1200, () => {
           spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:12, points:600, vy:35, pattern:P.radial12, patternDelay:900 });
         });
       },
@@ -436,7 +436,12 @@ class ShipSelectScene extends Phaser.Scene {
     this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.4);
 
     this.add.text(W/2, 60, 'SELECT YOUR SHIP', { font:'20px monospace', fill:'#fff' }).setOrigin(0.5).setDepth(5);
-    this.add.text(W/2, 88, 'ARROW KEYS · Z TO START', { font:'11px monospace', fill:'#888' }).setOrigin(0.5).setDepth(5);
+    this.add.text(W/2, 88, 'ARROW KEYS · Z START · X SLOW+LASER · M MUTE', { font:'9px monospace', fill:'#888' }).setOrigin(0.5).setDepth(5);
+    this.muteLabel = this.add.text(W-8, 8, '', { font:'11px monospace', fill:'#888' }).setOrigin(1,0).setDepth(5);
+    this.input.keyboard.on('keydown-M', () => {
+      this.sound.mute = !this.sound.mute;
+      this.muteLabel.setText(this.sound.mute ? '🔇 M' : '');
+    });
 
     this.cards = SHIPS.map((ship, i) => this.makeCard(ship, i));
     this.highlight();
@@ -484,7 +489,7 @@ class GameScene extends Phaser.Scene {
     this.gameOver     = false;
     this.bossActive   = false;
     this.wavesEnabled  = false; // held until level banner finishes
-    this.waveSpawning  = false; // true while delayedCall spawns are still in flight
+    this.pendingSpawns = 0;     // incremented per queued spawn, decremented on fire
     this.invincible   = 0;
     this.lives        = State.lives;
     this.shotCooldown  = 0;
@@ -529,6 +534,10 @@ class GameScene extends Phaser.Scene {
     this.cursors  = this.input.keyboard.createCursorKeys();
     this.fireKey  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
     this.focusKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+    this.input.keyboard.on('keydown-M', () => {
+      this.sound.mute = !this.sound.mute;
+      this.updateMuteLabel();
+    });
 
     // Collisions — power-ups use manual distance check in update (avoids physics callback corruption)
     const ba = (a, b) => a.active && b.active;
@@ -542,6 +551,8 @@ class GameScene extends Phaser.Scene {
     this.livesTxt  = this.add.text(8,  26, '♥♥♥',            { font:'13px monospace', fill:'#f55' }).setDepth(20);
     this.levelTxt  = this.add.text(W/2, 8, 'LV 1',           { font:'13px monospace', fill:'#aaa' }).setOrigin(0.5,0).setDepth(20);
     this.modeTxt   = this.add.text(W-8, 8, 'AUTO',           { font:'13px monospace', fill:'#4af' }).setOrigin(1,0).setDepth(20);
+    this.muteTxt   = this.add.text(W-8, 24, '',              { font:'11px monospace', fill:'#888' }).setOrigin(1,0).setDepth(20);
+    this.updateMuteLabel();
     this.powerBar  = this.add.graphics().setDepth(20);
     this.bossHPBar = this.add.graphics().setDepth(20);
     this.bossHPLabel = this.add.text(W/2, H-28, '', { font:'11px monospace', fill:'#f8f' }).setOrigin(0.5,0).setDepth(20);
@@ -566,7 +577,8 @@ class GameScene extends Phaser.Scene {
     // Wave progression — guarded by wavesEnabled so the level banner
     // can't race with the first spawnWave call
     this.waveTimer += delta;
-    if (this.wavesEnabled && !this.bossActive && !this.waveSpawning &&
+    if (this.wavesEnabled && !this.bossActive &&
+        this.pendingSpawns === 0 &&
         this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
       this.spawnWave();
     }
@@ -638,13 +650,21 @@ class GameScene extends Phaser.Scene {
     this.sound.play('sfx_shot', { volume: 0.18 });
 
     const px = this.player.x, py = this.player.y;
-    // Visual beam
-    this.laserBeam.lineStyle(6, 0xffdd00, 1);
+    const pl = State.powerLevel; // 0-4
+
+    // Beam grows in 5 phases with power level
+    const coreW  = 4  + pl * 3;          // 4 → 16 px
+    const glowW  = 12 + pl * 6;          // 12 → 36 px
+    const coreCol = pl >= 3 ? 0xff4400 : pl >= 2 ? 0xff8800 : 0xffdd00;
+    const glowCol = pl >= 3 ? 0xff0000 : pl >= 2 ? 0xff4400 : 0xff8800;
+    const damage  = 2 + Math.floor(pl / 2); // 2, 2, 3, 3, 4
+
+    this.laserBeam.lineStyle(coreW, coreCol, 1);
     this.laserBeam.beginPath(); this.laserBeam.moveTo(px, py - 12); this.laserBeam.lineTo(px, 0); this.laserBeam.strokePath();
-    this.laserBeam.lineStyle(14, 0xff8800, 0.35);
+    this.laserBeam.lineStyle(glowW, glowCol, 0.3);
     this.laserBeam.beginPath(); this.laserBeam.moveTo(px, py - 12); this.laserBeam.lineTo(px, 0); this.laserBeam.strokePath();
 
-    this.ship.laser(this, px, py);
+    this.ship.laser(this, px, py, damage);
   }
 
   // ── Collisions ────────────────────────────────────────────────────────────
@@ -720,20 +740,25 @@ class GameScene extends Phaser.Scene {
         if (!e.isBoss) { State.score += e.points || 100; this.spawnExplosion(e.x, e.y, 'small'); e.destroy(); }
         else { e.hp = Math.max(1, e.hp - 30); }
       });
-      // Clear spawn-wait flag so the wave check re-evaluates immediately
-      this.waveSpawning = false;
+      // Reset pending counter so the wave check re-evaluates immediately
+      this.pendingSpawns = 0;
     }
     this.updateHUD();
   }
 
   // ── Level flow ────────────────────────────────────────────────────────────
 
+  // Queue a spawn with precise tracking so the wave check never fires early
+  queueSpawn(delay, fn) {
+    this.pendingSpawns++;
+    this.time.delayedCall(delay, () => {
+      this.pendingSpawns = Math.max(0, this.pendingSpawns - 1);
+      fn();
+    });
+  }
+
   spawnWave() {
-    this.waveTimer    = 0;
-    this.waveSpawning = true;
-    // Hold the "no enemies" check for 2 s — long enough for all delayedCall
-    // spawns to fire (max spawn delay across all waves is ~1400 ms)
-    this.time.delayedCall(2000, () => { this.waveSpawning = false; });
+    this.waveTimer = 0;
 
     const waves = this.levelDef.waves;
 
@@ -808,6 +833,10 @@ class GameScene extends Phaser.Scene {
     this.bossHPBar.fillRect(x, y, Math.max(0, (boss.hp / boss.maxHp)) * w, h);
     this.bossHPBar.lineStyle(1, 0x8888aa);
     this.bossHPBar.strokeRect(x, y, w, h);
+  }
+
+  updateMuteLabel() {
+    if (this.muteTxt) this.muteTxt.setText(this.sound.mute ? '🔇 M' : '');
   }
 
   showBanner(text, color, cb) {
