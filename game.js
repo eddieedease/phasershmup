@@ -734,6 +734,41 @@ class GameScene extends Phaser.Scene {
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
 
+    // Wing-skew: Phaser canvas renderer ignores skewX property, so we patch
+    // renderCanvas to inject a shear (c component) into the transform matrix.
+    this.player._shear = 0;
+    this.player.renderCanvas = (renderer, src, camera, parentMatrix) => {
+      if (src.width === 0 || src.height === 0) return;
+      const alpha = camera.alpha * src.alpha;
+      if (alpha === 0) return;
+      const ctx = renderer.currentContext;
+      const frame = src.frame;
+      const cd = frame.canvasData;
+      const sm = renderer._tempMatrix2;
+      const cm = renderer._tempMatrix1;
+      const calc = renderer._tempMatrix3;
+      sm.applyITRS(src.x, src.y, src.rotation, src.scaleX, src.scaleY);
+      // Inject horizontal shear into the sprite matrix before camera multiply
+      sm.c += (src._shear || 0) * sm.d;
+      cm.copyFrom(camera.matrix);
+      sm.e -= camera.scrollX * src.scrollFactorX;
+      sm.f -= camera.scrollY * src.scrollFactorY;
+      cm.multiply(sm, calc);
+      const fw = frame.realWidth, fh = frame.realHeight, res = frame.source.resolution;
+      const fx = src.flipX ? -1 : 1, fy = src.flipY ? -1 : 1;
+      let dx = -src.displayOriginX + frame.x;
+      let dy = -src.displayOriginY + frame.y;
+      if (src.flipX) dx -= fw - src.displayOriginX * 2;
+      if (src.flipY) dy -= fh - src.displayOriginY * 2;
+      ctx.save();
+      calc.setToContext(ctx);
+      ctx.scale(fx / res, fy / res);
+      ctx.globalCompositeOperation = renderer.blendModes[src.blendMode];
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(frame.source.image, cd.x, cd.y, fw * res, fh * res, dx, dy, fw, fh);
+      ctx.restore();
+    };
+
     // Input
     this.cursors  = this.input.keyboard.createCursorKeys();
     this.fireKey  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
@@ -832,10 +867,9 @@ class GameScene extends Phaser.Scene {
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
 
-    // Wing skew — nose stays forward, wings sweep back; hitbox unaffected
-    // skewX > 0 → wings right (moving left), skewX < 0 → wings left (moving right)
-    const targetSkew = vx < 0 ? 0.32 : vx > 0 ? -0.32 : 0;
-    this.player.skewX += (targetSkew - this.player.skewX) * 0.16;
+    // Wing skew — nose leads, wings trail; hitbox unaffected
+    const targetShear = vx < 0 ? 0.22 : vx > 0 ? -0.22 : 0;
+    this.player._shear += (targetShear - this.player._shear) * 0.16;
 
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
