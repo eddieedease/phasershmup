@@ -445,10 +445,11 @@ class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
-    this.gameOver  = false;
-    this.bossActive = false;
-    this.invincible = 0;
-    this.lives = State.lives;
+    this.gameOver     = false;
+    this.bossActive   = false;
+    this.wavesEnabled = false; // held until level banner finishes
+    this.invincible   = 0;
+    this.lives        = State.lives;
     this.shotCooldown  = 0;
     this.laserCooldown = 0;
     this.waveIdx   = 0;
@@ -500,8 +501,9 @@ class GameScene extends Phaser.Scene {
 
     this.updateHUD();
 
-    // Show level title banner, then start waves
+    // Show level title banner, enable waves only after it finishes
     this.showBanner(`LEVEL ${State.level}  ${this.levelDef.title}`, '#fff', () => {
+      this.wavesEnabled = true;
       this.spawnWave();
     });
   }
@@ -514,9 +516,10 @@ class GameScene extends Phaser.Scene {
     this.bgNebula.tilePositionY -= 0.15;
     this.stars3.tilePositionY   -= 2.5;
 
-    // Wave progression runs regardless of player state
+    // Wave progression — guarded by wavesEnabled so the level banner
+    // can't race with the first spawnWave call
     this.waveTimer += delta;
-    if (!this.bossActive && this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
+    if (this.wavesEnabled && !this.bossActive && this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
       this.spawnWave();
     }
 
