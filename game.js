@@ -191,6 +191,7 @@ const LEVELS = [
   {
     title: 'SECTOR 1',
     bgTint: 0x000011,
+    nebulaTint: null, // natural colours
     waves: [
       s => {
         for (let i = 0; i < 5; i++) s.time.delayedCall(i * 350, () => {
@@ -221,6 +222,7 @@ const LEVELS = [
   {
     title: 'NEBULA CROSS',
     bgTint: 0x000820,
+    nebulaTint: 0x88bbff, // cool blue shift
     waves: [
       s => {
         for (let i = 0; i < 6; i++) s.time.delayedCall(i * 280, () => {
@@ -255,6 +257,7 @@ const LEVELS = [
   {
     title: 'VOID GATE',
     bgTint: 0x100008,
+    nebulaTint: 0xff6688, // ominous red/purple
     waves: [
       s => {
         for (let i = 0; i < 8; i++) s.time.delayedCall(i * 250, () => {
@@ -373,6 +376,12 @@ function spawnPowerup(scene, x, y) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
+
+  preload() {
+    this.load.image('bg_stars',  'assets/bg2.jpg');
+    this.load.image('bg_nebula', 'assets/bg1.png');
+  }
+
   create() {
     makeTextures(this);
     State.loadScores();
@@ -387,8 +396,8 @@ class ShipSelectScene extends Phaser.Scene {
   create() {
     this.sel = State.ship || 0;
 
-    this.add.tileSprite(0, 0, W, H, 'stars1').setOrigin(0,0).setDepth(0);
-    this.add.tileSprite(0, 0, W, H, 'stars2').setOrigin(0,0).setDepth(1);
+    this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0).setDepth(0);
+    this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.4);
 
     this.add.text(W/2, 60, 'SELECT YOUR SHIP', { font:'20px monospace', fill:'#fff' }).setOrigin(0.5).setDepth(5);
     this.add.text(W/2, 88, 'ARROW KEYS · Z TO START', { font:'11px monospace', fill:'#888' }).setOrigin(0.5).setDepth(5);
@@ -447,11 +456,12 @@ class GameScene extends Phaser.Scene {
     this.levelDef  = LEVELS[(State.level - 1) % LEVELS.length];
     this.ship      = SHIPS[State.ship];
 
-    // Background
-    this.bg = this.add.rectangle(0, 0, W, H, this.levelDef.bgTint).setOrigin(0,0).setDepth(0);
-    this.stars1 = this.add.tileSprite(0, 0, W, H, 'stars1').setOrigin(0,0).setDepth(1);
-    this.stars2 = this.add.tileSprite(0, 0, W, H, 'stars2').setOrigin(0,0).setDepth(2);
-    this.stars3 = this.add.tileSprite(0, 0, W, H, 'stars3').setOrigin(0,0).setDepth(3);
+    // Background — real assets, parallax layers
+    this.bgStars  = this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0).setDepth(0);
+    this.bgNebula = this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.55);
+    if (this.levelDef.nebulaTint) this.bgNebula.setTint(this.levelDef.nebulaTint);
+    // Fine star overlay for extra depth
+    this.stars3 = this.add.tileSprite(0, 0, W, H, 'stars3').setOrigin(0,0).setDepth(2);
 
     // Groups
     this.playerBullets = this.physics.add.group();
@@ -496,9 +506,9 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.invincible = Math.max(0, this.invincible - delta);
 
-    this.stars1.tilePositionY -= 0.5;
-    this.stars2.tilePositionY -= 1.8;
-    this.stars3.tilePositionY -= 3.5;
+    this.bgStars.tilePositionY  -= 0.4;
+    this.bgNebula.tilePositionY -= 0.15;
+    this.stars3.tilePositionY   -= 2.5;
 
     // Wave progression runs regardless of player state
     this.waveTimer += delta;
@@ -758,8 +768,8 @@ class GameOverScene extends Phaser.Scene {
   constructor() { super('GameOver'); }
 
   create(data) {
-    this.add.tileSprite(0, 0, W, H, 'stars1').setOrigin(0,0);
-    this.add.tileSprite(0, 0, W, H, 'stars2').setOrigin(0,0);
+    this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0);
+    this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setAlpha(0.4);
 
     const victory = data && data.victory;
     this.add.text(W/2, 120, victory ? 'MISSION COMPLETE' : 'GAME OVER',
@@ -803,8 +813,8 @@ class HighscoreScene extends Phaser.Scene {
   constructor() { super('Highscore'); }
 
   create() {
-    this.add.tileSprite(0, 0, W, H, 'stars1').setOrigin(0,0);
-    this.add.tileSprite(0, 0, W, H, 'stars2').setOrigin(0,0);
+    this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0);
+    this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setAlpha(0.4);
 
     this.add.text(W/2, 50, 'HIGH SCORES', { font:'24px monospace', fill:'#ff0' }).setOrigin(0.5);
 
