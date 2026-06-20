@@ -812,9 +812,10 @@ class GameScene extends Phaser.Scene {
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
 
-    // Visual bank — smoothly tilt toward movement direction; hitbox unaffected
-    const targetAngle = vx < 0 ? -18 : vx > 0 ? 18 : 0;
-    this.player.angle += (targetAngle - this.player.angle) * 0.18;
+    // Wing skew — nose stays forward, wings sweep back; hitbox unaffected
+    // skewX > 0 → wings right (moving left), skewX < 0 → wings left (moving right)
+    const targetSkew = vx < 0 ? 0.32 : vx > 0 ? -0.32 : 0;
+    this.player.setSkewX(this.player.skewX + (targetSkew - this.player.skewX) * 0.16);
 
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
