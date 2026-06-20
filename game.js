@@ -406,10 +406,12 @@ class BootScene extends Phaser.Scene {
     );
     // Music
     // Sound effects
-    this.load.audio('sfx_shot',    'assets/Audio/effects/playershot.wav');
-    this.load.audio('sfx_hit',     'assets/Audio/effects/playerhit.wav');
-    this.load.audio('sfx_bomb',    'assets/Audio/effects/bomb.wav');
-    this.load.audio('sfx_powerup', 'assets/Audio/effects/power up.wav');
+    this.load.audio('sfx_shot',       'assets/Audio/effects/playershot.wav');
+    this.load.audio('sfx_hit',        'assets/Audio/effects/playerhit.wav');
+    this.load.audio('sfx_bomb',       'assets/Audio/effects/bomb.wav');
+    this.load.audio('sfx_powerup',    'assets/Audio/effects/power up.wav');
+    this.load.audio('sfx_enemyhit',   'assets/Audio/effects/enemyhit.wav');
+    this.load.audio('sfx_bossdead',   'assets/Audio/effects/destroy boss.wav');
     // Music
     this.load.audio('music_main',   'assets/Audio/levelbm/maintheme.ogg');
     this.load.audio('music_level1', 'assets/Audio/levelbm/level1.ogg');
@@ -421,7 +423,77 @@ class BootScene extends Phaser.Scene {
   create() {
     makeTextures(this);
     State.loadScores();
-    this.scene.start('ShipSelect');
+    this.scene.start('Title');
+  }
+}
+
+// ── Title Screen ──────────────────────────────────────────────────────────────
+class TitleScene extends Phaser.Scene {
+  constructor() { super('Title'); }
+
+  create() {
+    const W = this.scale.width, H = this.scale.height;
+    playMusic(this, 'music_main', 0.55);
+
+    // Scrolling star background
+    this.bg = this.add.tileSprite(W/2, H/2, W, H, 'bg_stars').setDepth(0).setTileScale(1.6);
+    this.add.tileSprite(W/2, H/2, W, H, 'bg_nebula').setDepth(1).setAlpha(0.5).setTileScale(1.6);
+
+    // Decorative lines under the logo
+    const gfx = this.add.graphics().setDepth(3);
+    const lineY = H / 2 + 20;
+    gfx.lineStyle(2, 0x00eeff, 0.7);
+    gfx.beginPath(); gfx.moveTo(W*0.12, lineY); gfx.lineTo(W*0.88, lineY); gfx.strokePath();
+    gfx.lineStyle(1, 0x00eeff, 0.2);
+    gfx.beginPath(); gfx.moveTo(W*0.06, lineY + 5); gfx.lineTo(W*0.94, lineY + 5); gfx.strokePath();
+
+    // "EA" in gold
+    this.add.text(W/2, H/2 - 16, 'EA', {
+      font: 'bold 72px monospace', fill: '#ffcc00',
+      stroke: '#996600', strokeThickness: 5,
+    }).setOrigin(1, 0.5).setDepth(4);
+
+    // "ser" in white (directly right of EA — same baseline)
+    this.add.text(W/2, H/2 - 16, 'ser', {
+      font: 'bold 72px monospace', fill: '#ffffff',
+      stroke: '#335566', strokeThickness: 3,
+    }).setOrigin(0, 0.5).setDepth(4);
+
+    // Subtitle tagline
+    this.add.text(W/2, H/2 + 36, 'G A L A C T I C   A S S A U L T', {
+      font: '8px monospace', fill: '#7799bb',
+    }).setOrigin(0.5).setDepth(4);
+
+    // Blinking PRESS Z prompt
+    this.pressZ = this.add.text(W/2, H * 0.72, 'PRESS  Z  TO  START', {
+      font: '13px monospace', fill: '#ffffff',
+    }).setOrigin(0.5).setDepth(4);
+    this.tweens.add({ targets: this.pressZ, alpha: 0, duration: 540, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // Controls hint at bottom
+    this.add.text(W/2, H - 18, 'Z SHOOT · X SLOW+LASER · M MUTE', {
+      font: '7px monospace', fill: '#334455',
+    }).setOrigin(0.5).setDepth(4);
+
+    // Mute
+    this.muteTxt = this.add.text(W - 8, 8, '', { font: '11px monospace', fill: '#888' })
+      .setOrigin(1, 0).setDepth(5);
+    this.input.keyboard.on('keydown-M', () => {
+      this.sound.mute = !this.sound.mute;
+      this.muteTxt.setText(this.sound.mute ? '🔇 M' : '');
+    });
+
+    // Z → Ship Select with fade
+    this.input.keyboard.once('keydown-Z', () => {
+      this.cameras.main.fadeOut(220, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ShipSelect'));
+    });
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+  }
+
+  update() {
+    this.bg.tilePositionY -= 0.6;
   }
 }
 
@@ -686,6 +758,7 @@ class GameScene extends Phaser.Scene {
       enemy.destroy();
       this.spawnExplosion(ex, ey, sz);
       if (wasBoss) {
+        this.sound.play('sfx_bossdead', { volume: 0.9 });
         this.time.delayedCall(600, () => this.levelComplete());
       }
       // Chance to drop power-up
@@ -693,6 +766,7 @@ class GameScene extends Phaser.Scene {
         spawnPowerup(this, ex, ey);
       }
     } else {
+      this.sound.play('sfx_enemyhit', { volume: 0.35 });
       this.tweens.add({ targets: enemy, alpha: 0.4, duration: 50, yoyo: true });
     }
   }
@@ -1046,7 +1120,7 @@ const config = {
     default: 'arcade',
     arcade: { gravity: { y:0 }, debug: false }
   },
-  scene: [BootScene, ShipSelectScene, GameScene, GameOverScene, HighscoreScene]
+  scene: [BootScene, TitleScene, ShipSelectScene, GameScene, GameOverScene, HighscoreScene]
 };
 
 new Phaser.Game(config);
