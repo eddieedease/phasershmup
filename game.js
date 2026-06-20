@@ -242,12 +242,28 @@ const LEVELS = [
           spawnEnemy(s, W-60, -30, { hp:4, points:180, vx:-40, vy:60, pattern:P.aimed1, patternDelay:1100 });
         });
       },
-      // 6 — miniboss warmup: two heavy ships
+      // 6 — v-shape spread swarm
+      s => {
+        for (let i = 0; i < 7; i++) s.queueSpawn(i * 260, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:140, vy:90, pattern:P.vShape, patternDelay:1200 });
+        });
+      },
+      // 7 — side-weaving pairs + radial centre
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 450, () => {
+          spawnEnemy(s, 60,   -30, { hp:3, points:130, vx:50, vy:70, pattern:P.aimed1, patternDelay:1100 });
+          spawnEnemy(s, W-60, -30, { hp:3, points:130, vx:-50, vy:70, pattern:P.aimed1, patternDelay:1100 });
+        });
+        s.queueSpawn(600, () => {
+          spawnEnemy(s, W/2, -40, { texture:'ship_0015', hp:6, points:300, vy:44, pattern:P.radial8, patternDelay:1300 });
+        });
+      },
+      // 8 — miniboss warmup: two heavy ships
       s => {
         s.queueSpawn(0, () => {
           spawnEnemy(s, W*0.3, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
         });
-        s.queueSpawn(500, () => {
+        s.queueSpawn(600, () => {
           spawnEnemy(s, W*0.7, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
         });
       },
@@ -316,6 +332,22 @@ const LEVELS = [
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1100 });
         });
       },
+      // 8 — crossfire wall
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
+          spawnEnemy(s, 60,   -30, { texture:'ship_0015', hp:7, points:350, vx:40, vy:55, pattern:P.crossAim, patternDelay:1000 });
+          spawnEnemy(s, W-60, -30, { texture:'ship_0015', hp:7, points:350, vx:-40, vy:55, pattern:P.crossAim, patternDelay:1000 });
+        });
+      },
+      // 9 — spiral carpet + fast aimed
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 550, () => {
+          spawnEnemy(s, 90 + i*100, -40, { texture:'ship_0015', hp:8, points:400, vy:36, pattern:P.spiral, patternDelay:200 });
+        });
+        for (let i = 0; i < 6; i++) s.queueSpawn(150 + i * 250, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:100, pattern:P.aimed3, patternDelay:1000 });
+        });
+      },
     ],
     boss: s => spawnBoss(s, {
       hp: 550, points: 9000,
@@ -382,13 +414,28 @@ const LEVELS = [
           spawnEnemy(s, 70 + i*115, -45, { texture:'ship_0015', hp:10, points:500, vy:40, pattern:P.doubleRadial, patternDelay:900 });
         });
       },
-      // 8 — everything at once — pre-boss hell
+      // 8 — everything at once
       s => {
         for (let i = 0; i < 6; i++) s.queueSpawn(i * 240, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:110, pattern:P.aimed5, patternDelay:900 });
         });
         for (let i = 0; i < 3; i++) s.queueSpawn(400 + i * 600, () => {
           spawnEnemy(s, 90 + i*150, -45, { texture:'ship_0015', hp:10, points:500, vy:40, pattern:P.crossAim, patternDelay:950 });
+        });
+      },
+      // 9 — radial-16 wall
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 420, () => {
+          spawnEnemy(s, 70 + i*85, -45, { texture:'ship_0015', hp:11, points:550, vy:38, pattern:P.radial16, patternDelay:850 });
+        });
+      },
+      // 10 — absolute hell: aimed-5 swarm + double-radial heavies
+      s => {
+        for (let i = 0; i < 9; i++) s.queueSpawn(i * 170, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:115, pattern:P.aimed5, patternDelay:850 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(800 + i * 500, () => {
+          spawnEnemy(s, 100 + i*140, -50, { texture:'ship_0015', hp:12, points:600, vy:36, pattern:P.doubleRadial, patternDelay:800 });
         });
       },
     ],
@@ -470,10 +517,12 @@ function startBossMove(scene, boss, style) {
 }
 
 // ─── Power-up types ───────────────────────────────────────────────────────────
-const POWERUP_TYPES = ['power', 'power', 'power', 'life', 'bomb'];
+const POWERUP_TYPES       = ['power', 'power', 'power', 'power', 'bomb'];         // regular enemies
+const POWERUP_TYPES_HEAVY = ['power', 'power', 'power', 'bomb',  'power', 'life']; // armoured/boss
 
-function spawnPowerup(scene, x) {
-  const type = Phaser.Utils.Array.GetRandom(POWERUP_TYPES);
+function spawnPowerup(scene, x, heavy = false) {
+  const pool = heavy ? POWERUP_TYPES_HEAVY : POWERUP_TYPES;
+  const type = Phaser.Utils.Array.GetRandom(pool);
   const key = type === 'life' ? 'pu_life' : type === 'bomb' ? 'pu_bomb' : 'pu_power';
   // Drift in from the top at a random x, slow fall
   const spawnX = x !== undefined ? Phaser.Math.Clamp(x, 24, W - 24) : Phaser.Math.Between(24, W - 24);
@@ -733,44 +782,6 @@ class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
     this.player.body.setSize(12, 12, true);
-    this.player._shear = 0;
-
-    // Wing-shear via two drawImage calls in one renderCanvas override.
-    // Texture is 32×32; in local draw space origin is (0,0), so:
-    //   top half  (rows 0-15)  → dst y: -16 to  0  (nose — NO shear)
-    //   bottom half (rows 16-31)→ dst y:   0 to 16  (wings — shear applied)
-    // Shear displacement at local y=0 (seam) = 0; at y=+16 (tips) = _shear*32.
-    // Nose stays exactly at player.x → bullets/laser always look correct.
-    this.player.renderCanvas = (renderer, src, camera) => {
-      const alpha = camera.alpha * src.alpha;
-      if (alpha === 0) return;
-      const ctx = renderer.currentContext;
-      const img = src.frame.source.image;
-      const res = src.frame.source.resolution;
-      const sm = renderer._tempMatrix2, cm = renderer._tempMatrix1, calc = renderer._tempMatrix3;
-      const blend = renderer.blendModes[src.blendMode];
-      const shear = src._shear || 0;
-
-      const half = (shearAmt, srcY) => {
-        sm.applyITRS(src.x, src.y, src.rotation, src.scaleX, src.scaleY);
-        if (shearAmt) sm.c += shearAmt * sm.d;
-        cm.copyFrom(camera.matrix);
-        sm.e -= camera.scrollX * src.scrollFactorX;
-        sm.f -= camera.scrollY * src.scrollFactorY;
-        cm.multiply(sm, calc);
-        ctx.save();
-        calc.setToContext(ctx);
-        ctx.scale(1 / res, 1 / res);
-        ctx.globalCompositeOperation = blend;
-        ctx.globalAlpha = alpha;
-        // src 32×16 slice, dst in local texture-px coords (-16..+16 range)
-        ctx.drawImage(img, 0, srcY * res, 32 * res, 16 * res, -16, srcY - 16, 32, 16);
-        ctx.restore();
-      };
-
-      half(0,     0);  // top half: no shear, rows 0-15
-      half(shear, 16); // bottom half: wings, rows 16-31
-    };
 
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
@@ -873,10 +884,6 @@ class GameScene extends Phaser.Scene {
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
 
-    // Wings-only shear — bottom half shears, top (nose) stays fixed
-    const targetShear = vx < 0 ? 0.22 : vx > 0 ? -0.22 : 0;
-    this.player._shear += (targetShear - this.player._shear) * 0.16;
-
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
@@ -942,8 +949,9 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(600, () => this.levelComplete());
       }
       // Chance to drop power-up
-      if (Phaser.Math.Between(1, 100) <= (wasBoss ? 100 : 20)) {
-        spawnPowerup(this, ex);
+      const isHeavy = wasBoss || (enemy.texture && enemy.texture.key === 'ship_0015');
+      if (Phaser.Math.Between(1, 100) <= (wasBoss ? 100 : isHeavy ? 40 : 15)) {
+        spawnPowerup(this, ex, isHeavy);
       }
     } else {
       this.sound.play('sfx_enemyhit', { volume: 0.35 });
