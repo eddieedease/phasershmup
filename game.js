@@ -9,7 +9,8 @@ const State = {
   score: 0,
   level: 1,
   lives: 3,
-  powerLevel: 0,    // 0-4
+  powerLevel: 0,    // 0-4 actual power tier
+  subPower: 0,      // 0-3 pickups within current tier before leveling up
   scores: [],       // highscore list [{name, score, level}]
 
   loadScores() {
@@ -471,16 +472,18 @@ function startBossMove(scene, boss, style) {
 // ─── Power-up types ───────────────────────────────────────────────────────────
 const POWERUP_TYPES = ['power', 'power', 'power', 'life', 'bomb'];
 
-function spawnPowerup(scene, x, y) {
+function spawnPowerup(scene, x) {
   const type = Phaser.Utils.Array.GetRandom(POWERUP_TYPES);
   const key = type === 'life' ? 'pu_life' : type === 'bomb' ? 'pu_bomb' : 'pu_power';
-  const pu = scene.powerups.create(x, y, key);
+  // Drift in from the top at a random x, slow fall
+  const spawnX = x !== undefined ? Phaser.Math.Clamp(x, 24, W - 24) : Phaser.Math.Between(24, W - 24);
+  const pu = scene.powerups.create(spawnX, -16, key);
   pu.setDepth(9);
   pu.puType = type;
   pu.body.allowGravity = false;
-  pu.setVelocityY(90);
-  // Gentle bob
-  scene.tweens.add({ targets: pu, y: y + 8, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  pu.setVelocityY(38);
+  // Gentle bob layered on top of the slow drift
+  scene.tweens.add({ targets: pu, x: spawnX + Phaser.Math.Between(-12, 12), duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   return pu;
 }
 
@@ -653,7 +656,7 @@ class ShipSelectScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-RIGHT', () => { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); });
     this.input.keyboard.on('keydown-Z', () => {
       State.ship = this.sel;
-      State.score = 0; State.level = 1; State.lives = 3; State.powerLevel = 0;
+      State.score = 0; State.level = 1; State.lives = 3; State.powerLevel = 0; State.subPower = 0;
       this.scene.start('Game');
     });
     this.input.keyboard.on('keydown-H', () => this.scene.start('Highscore'));
@@ -937,7 +940,7 @@ class GameScene extends Phaser.Scene {
       }
       // Chance to drop power-up
       if (Phaser.Math.Between(1, 100) <= (wasBoss ? 100 : 20)) {
-        spawnPowerup(this, ex, ey);
+        spawnPowerup(this, ex);
       }
     } else {
       this.sound.play('sfx_enemyhit', { volume: 0.35 });
@@ -975,9 +978,20 @@ class GameScene extends Phaser.Scene {
     pu.destroy(); // safe — called from update, not from a physics callback
 
     if (type === 'power') {
-      State.powerLevel = Math.min(State.powerLevel + 1, 4);
       this.sound.play('sfx_powerup', { volume: 0.6 });
-      this.flashText(px, py - 20, 'POWER UP!', '#ff0');
+      if (State.powerLevel < 4) {
+        State.subPower++;
+        if (State.subPower >= 4) {
+          State.subPower = 0;
+          State.powerLevel = Math.min(State.powerLevel + 1, 4);
+          this.flashText(px, py - 20, 'POWER UP!', '#ff0');
+          this.cameras.main.flash(120, 255, 220, 0, false, null, null, 0.35);
+        } else {
+          this.flashText(px, py - 20, `PWR ${State.subPower}/4`, '#ffaa00');
+        }
+      } else {
+        this.flashText(px, py - 20, 'MAX POWER', '#ff4400');
+      }
     } else if (type === 'life') {
       this.lives = Math.min(this.lives + 1, 5);
       State.lives = this.lives;
@@ -1030,15 +1044,34 @@ class GameScene extends Phaser.Scene {
     this.bossHPLabel.setText('');
     State.score += State.level * 1000; // level bonus
 
-    if (State.level >= LEVELS.length) {
-      // All levels done — victory
-      this.showBanner('VICTORY!', '#ff0', () => this.doGameOver(true));
-    } else {
-      State.level++;
-      this.showBanner('STAGE CLEAR!', '#0f0', () => {
-        this.scene.restart();
+    const isVictory = State.level >= LEVELS.length;
+
+    // Show STAGE CLEAR / VICTORY banner, then count down 5→0 before moving on
+    this.showBanner(isVictory ? 'VICTORY!' : 'STAGE CLEAR!', isVictory ? '#ff0' : '#0f0', () => {
+      let count = 5;
+      const cd = this.add.text(W / 2, H / 2 + 30, `NEXT STAGE IN  ${count}`, {
+        font: '14px monospace', fill: '#ffffff',
+      }).setOrigin(0.5).setDepth(30);
+
+      const tick = this.time.addEvent({
+        delay: 1000, repeat: 4,
+        callback: () => {
+          count--;
+          if (count > 0) {
+            cd.setText(`NEXT STAGE IN  ${count}`);
+          } else {
+            cd.destroy();
+            tick.remove();
+            if (isVictory) {
+              this.doGameOver(true);
+            } else {
+              State.level++;
+              this.scene.restart();
+            }
+          }
+        }
       });
-    }
+    });
   }
 
   doGameOver(victory = false) {
@@ -1063,10 +1096,28 @@ class GameScene extends Phaser.Scene {
   drawPowerBar() {
     this.powerBar.clear();
     const x = 8, y = H - 18, w = 80, h = 6;
-    this.powerBar.fillStyle(0x333355);
+    const segW = w / 4;
+    // Background
+    this.powerBar.fillStyle(0x222233);
     this.powerBar.fillRect(x, y, w, h);
-    this.powerBar.fillStyle(0xffcc00);
-    this.powerBar.fillRect(x, y, (State.powerLevel / 4) * w, h);
+    // Filled tier segments
+    for (let i = 0; i < State.powerLevel; i++) {
+      this.powerBar.fillStyle(0xffcc00);
+      this.powerBar.fillRect(x + i * segW + 1, y + 1, segW - 2, h - 2);
+    }
+    // Partial fill for current tier (sub-meter)
+    if (State.powerLevel < 4 && State.subPower > 0) {
+      this.powerBar.fillStyle(0xff8800);
+      this.powerBar.fillRect(x + State.powerLevel * segW + 1, y + 1, (State.subPower / 4) * segW - 2, h - 2);
+    }
+    // Segment dividers
+    this.powerBar.lineStyle(1, 0x556688);
+    for (let i = 1; i < 4; i++) {
+      this.powerBar.beginPath();
+      this.powerBar.moveTo(x + i * segW, y);
+      this.powerBar.lineTo(x + i * segW, y + h);
+      this.powerBar.strokePath();
+    }
     this.powerBar.lineStyle(1, 0x8888aa);
     this.powerBar.strokeRect(x, y, w, h);
   }
