@@ -191,7 +191,8 @@ const LEVELS = [
   {
     title: 'SECTOR 1',
     bgTint: 0x000011,
-    nebulaTint: null, // natural colours
+    nebulaTint: null,
+    overlayColor: 0x000033, overlayAlpha: 0
     waves: [
       s => {
         for (let i = 0; i < 5; i++) s.time.delayedCall(i * 350, () => {
@@ -222,7 +223,8 @@ const LEVELS = [
   {
     title: 'NEBULA CROSS',
     bgTint: 0x000820,
-    nebulaTint: 0x88bbff, // cool blue shift
+    nebulaTint: 0x88bbff,
+    overlayColor: 0x0044cc, overlayAlpha: 0.28
     waves: [
       s => {
         for (let i = 0; i < 6; i++) s.time.delayedCall(i * 280, () => {
@@ -257,7 +259,8 @@ const LEVELS = [
   {
     title: 'VOID GATE',
     bgTint: 0x100008,
-    nebulaTint: 0xff6688, // ominous red/purple
+    nebulaTint: 0xff6688,
+    overlayColor: 0x880011, overlayAlpha: 0.32
     waves: [
       s => {
         for (let i = 0; i < 8; i++) s.time.delayedCall(i * 250, () => {
@@ -457,12 +460,19 @@ class GameScene extends Phaser.Scene {
     this.levelDef  = LEVELS[(State.level - 1) % LEVELS.length];
     this.ship      = SHIPS[State.ship];
 
-    // Background — real assets, parallax layers
-    this.bgStars  = this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0).setDepth(0);
-    this.bgNebula = this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.55);
+    // Background — zoomed in (tileScale) so seams stay off-screen; Y-scroll only
+    this.bgStars  = this.add.tileSprite(W/2, H/2, W, H, 'bg_stars')
+      .setDepth(0).setTileScale(1.6);
+    this.bgNebula = this.add.tileSprite(W/2, H/2, W, H, 'bg_nebula')
+      .setDepth(1).setAlpha(0.6).setTileScale(1.6);
     if (this.levelDef.nebulaTint) this.bgNebula.setTint(this.levelDef.nebulaTint);
-    // Fine star overlay for extra depth
+    // Fine star overlay
     this.stars3 = this.add.tileSprite(0, 0, W, H, 'stars3').setOrigin(0,0).setDepth(2);
+    // Per-level colour wash — makes each level visually distinct
+    if (this.levelDef.overlayAlpha > 0) {
+      this.add.rectangle(0, 0, W, H, this.levelDef.overlayColor, this.levelDef.overlayAlpha)
+        .setOrigin(0, 0).setDepth(2.5);
+    }
 
     // Groups
     this.playerBullets = this.physics.add.group();
@@ -512,8 +522,8 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.invincible = Math.max(0, this.invincible - delta);
 
-    this.bgStars.tilePositionY  -= 0.4;
-    this.bgNebula.tilePositionY -= 0.15;
+    this.bgStars.tilePositionY  -= 0.25;
+    this.bgNebula.tilePositionY -= 0.08;
     this.stars3.tilePositionY   -= 2.5;
 
     // Wave progression — guarded by wavesEnabled so the level banner
@@ -629,8 +639,20 @@ class GameScene extends Phaser.Scene {
     this.lives--;
     State.lives = this.lives;
     this.livesTxt.setText('♥'.repeat(Math.max(0, this.lives)));
-    this.invincible = 2200;
-    this.tweens.add({ targets: player, alpha: 0.15, duration: 100, yoyo: true, repeat: 10, onComplete: () => player.setAlpha(1) });
+    this.invincible = 2500;
+
+    // Dramatic hit feedback
+    this.cameras.main.shake(280, 0.018);
+    this.cameras.main.flash(180, 255, 30, 30);
+    this.flashText(player.x, player.y - 30, '-1 LIFE', '#f00');
+
+    // Red tint + rapid flash during invincibility
+    player.setTint(0xff4444);
+    this.tweens.add({
+      targets: player, alpha: 0.2, duration: 80, yoyo: true, repeat: 14,
+      onComplete: () => { player.setAlpha(1); player.clearTint(); player.setTint(this.ship.color); }
+    });
+
     if (this.lives <= 0) this.doGameOver();
   }
 
