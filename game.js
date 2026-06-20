@@ -206,20 +206,48 @@ const LEVELS = [
     nebulaTint: null,
     overlayColor: 0x000033, overlayAlpha: 0,
     waves: [
+      // 1 — intro trickle, slow aimed shots
       s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:80, pattern:P.aimed1, patternDelay:1600 });
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 380, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:75, pattern:P.aimed1, patternDelay:1800 });
         });
       },
+      // 2 — pairs from sides
       s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 400, () => {
-          spawnEnemy(s, 70, -30, { hp:3, points:120, vx:35, vy:70, pattern:P.aimed1, patternDelay:1300 });
-          spawnEnemy(s, W-70, -30, { hp:3, points:120, vx:-35, vy:70, pattern:P.aimed1, patternDelay:1300 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 420, () => {
+          spawnEnemy(s, 70,   -30, { hp:3, points:120, vx:30, vy:65, pattern:P.aimed1, patternDelay:1400 });
+          spawnEnemy(s, W-70, -30, { hp:3, points:120, vx:-30, vy:65, pattern:P.aimed1, patternDelay:1400 });
         });
       },
+      // 3 — diagonal sweep left-to-right
       s => {
-        for (let i = 0; i < 3; i++) s.queueSpawn(i * 600, () => {
-          spawnEnemy(s, 120 + i*120, -40, { texture:'ship_0015', hp:5, points:250, vy:50, pattern:P.radial8, patternDelay:1400 });
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 300, () => {
+          spawnEnemy(s, 60 + i * 60, -30, { hp:2, points:110, vx:25, vy:80, pattern:P.aimed1, patternDelay:1500 });
+        });
+      },
+      // 4 — first armoured ships with radial bursts
+      s => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 650, () => {
+          spawnEnemy(s, 110 + i*130, -40, { texture:'ship_0015', hp:5, points:250, vy:48, pattern:P.radial8, patternDelay:1400 });
+        });
+      },
+      // 5 — fast aimed trio + flankers
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 300, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:95, pattern:P.aimed3, patternDelay:1200 });
+        });
+        s.queueSpawn(800, () => {
+          spawnEnemy(s, 60,   -30, { hp:4, points:180, vx:40, vy:60, pattern:P.aimed1, patternDelay:1100 });
+          spawnEnemy(s, W-60, -30, { hp:4, points:180, vx:-40, vy:60, pattern:P.aimed1, patternDelay:1100 });
+        });
+      },
+      // 6 — miniboss warmup: two heavy ships
+      s => {
+        s.queueSpawn(0, () => {
+          spawnEnemy(s, W*0.3, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
+        });
+        s.queueSpawn(500, () => {
+          spawnEnemy(s, W*0.7, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
         });
       },
     ],
@@ -238,24 +266,53 @@ const LEVELS = [
     nebulaTint: 0x88bbff,
     overlayColor: 0x0044cc, overlayAlpha: 0.28,
     waves: [
+      // 1 — fast aimed triple
       s => {
         for (let i = 0; i < 6; i++) s.queueSpawn(i * 280, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1200 });
         });
       },
+      // 2 — v-shape flankers
       s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 500, () => {
-          spawnEnemy(s, 80 + i*100, -30, { texture:'ship_0015', hp:6, points:300, vy:40, pattern:P.radial8, patternDelay:1200 });
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 320, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:160, vy:80, pattern:P.vShape, patternDelay:1300 });
         });
       },
+      // 3 — radial armoured column
       s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:80, pattern:P.vShape, patternDelay:1300 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 520, () => {
+          spawnEnemy(s, 80 + i*107, -30, { texture:'ship_0015', hp:6, points:300, vy:42, pattern:P.radial8, patternDelay:1200 });
         });
       },
+      // 4 — cross-fire side pairs + aimed centre
+      s => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 500, () => {
+          spawnEnemy(s, 70,   -30, { hp:4, points:180, vx:35, vy:70, pattern:P.aimed3, patternDelay:1100 });
+          spawnEnemy(s, W-70, -30, { hp:4, points:180, vx:-35, vy:70, pattern:P.aimed3, patternDelay:1100 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(200 + i * 350, () => {
+          spawnEnemy(s, Phaser.Math.Between(100, W-100), -30, { hp:3, points:150, vy:85, pattern:P.aimed1, patternDelay:1000 });
+        });
+      },
+      // 5 — spiral column
       s => {
         for (let i = 0; i < 3; i++) s.queueSpawn(i * 700, () => {
           spawnEnemy(s, 80 + i*160, -40, { texture:'ship_0015', hp:7, points:350, vy:35, pattern:P.spiral, patternDelay:220 });
+        });
+      },
+      // 6 — dense swarm
+      s => {
+        for (let i = 0; i < 10; i++) s.queueSpawn(i * 180, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:100, pattern:P.aimed3, patternDelay:1100 });
+        });
+      },
+      // 7 — double radial heavies + aimed chaff
+      s => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 600, () => {
+          spawnEnemy(s, 100 + i*140, -45, { texture:'ship_0015', hp:9, points:450, vy:38, pattern:P.doubleRadial, patternDelay:1000 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(300 + i * 300, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1100 });
         });
       },
     ],
@@ -274,23 +331,63 @@ const LEVELS = [
     nebulaTint: 0xff6688,
     overlayColor: 0x880011, overlayAlpha: 0.32,
     waves: [
+      // 1 — fast aimed swarm
       s => {
-        for (let i = 0; i < 8; i++) s.queueSpawn(i * 250, () => {
+        for (let i = 0; i < 8; i++) s.queueSpawn(i * 220, () => {
           spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:180, vy:100, pattern:P.aimed3, patternDelay:1000 });
         });
       },
+      // 2 — side cross-aim pairs
       s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 400, () => {
-          spawnEnemy(s, 70, -30, { texture:'ship_0015', hp:8, points:400, vx:40, vy:60, pattern:P.crossAim, patternDelay:1100 });
-          spawnEnemy(s, W-70, -30, { texture:'ship_0015', hp:8, points:400, vx:-40, vy:60, pattern:P.crossAim, patternDelay:1100 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 420, () => {
+          spawnEnemy(s, 70,   -30, { hp:4, points:220, vx:40, vy:65, pattern:P.crossAim, patternDelay:1100 });
+          spawnEnemy(s, W-70, -30, { hp:4, points:220, vx:-40, vy:65, pattern:P.crossAim, patternDelay:1100 });
         });
       },
+      // 3 — radial column + aimed flankers
       s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 400, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:70, pattern:P.radial8, patternDelay:1000 });
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 380, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:75, pattern:P.radial8, patternDelay:1000 });
         });
-        s.queueSpawn(1200, () => {
-          spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:12, points:600, vy:35, pattern:P.radial12, patternDelay:900 });
+      },
+      // 4 — spiral heavies + chaff
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 550, () => {
+          spawnEnemy(s, 80 + i*120, -40, { texture:'ship_0015', hp:8, points:400, vx:20*((i%2)*2-1), vy:55, pattern:P.spiral, patternDelay:200 });
+        });
+        for (let i = 0; i < 5; i++) s.queueSpawn(200 + i * 280, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:180, vy:95, pattern:P.aimed3, patternDelay:950 });
+        });
+      },
+      // 5 — cross-fire crosshatch
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 400, () => {
+          spawnEnemy(s, 70,   -30, { texture:'ship_0015', hp:8, points:400, vx:40, vy:60, pattern:P.crossAim, patternDelay:1000 });
+          spawnEnemy(s, W-70, -30, { texture:'ship_0015', hp:8, points:400, vx:-40, vy:60, pattern:P.crossAim, patternDelay:1000 });
+        });
+      },
+      // 6 — dense aimed + centre radial-12
+      s => {
+        for (let i = 0; i < 7; i++) s.queueSpawn(i * 200, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:105, pattern:P.aimed5, patternDelay:950 });
+        });
+        s.queueSpawn(1000, () => {
+          spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:14, points:700, vy:32, pattern:P.radial12, patternDelay:850 });
+        });
+      },
+      // 7 — double radial heavies wall
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 500, () => {
+          spawnEnemy(s, 70 + i*115, -45, { texture:'ship_0015', hp:10, points:500, vy:40, pattern:P.doubleRadial, patternDelay:900 });
+        });
+      },
+      // 8 — everything at once — pre-boss hell
+      s => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 240, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:110, pattern:P.aimed5, patternDelay:900 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(400 + i * 600, () => {
+          spawnEnemy(s, 90 + i*150, -45, { texture:'ship_0015', hp:10, points:500, vy:40, pattern:P.crossAim, patternDelay:950 });
         });
       },
     ],
@@ -483,6 +580,18 @@ class TitleScene extends Phaser.Scene {
       this.muteTxt.setText(this.sound.mute ? '🔇 M' : '');
     });
 
+    // Fullscreen button
+    const fsbg = this.add.rectangle(W/2, H * 0.86, 130, 22, 0x002233, 0.85).setDepth(4).setInteractive({ useHandCursor: true });
+    const fstxt = this.add.text(W/2, H * 0.86, '⛶  FULLSCREEN', { font: '9px monospace', fill: '#44ccff' }).setOrigin(0.5).setDepth(5);
+    const toggleFS = () => {
+      if (this.scale.isFullscreen) this.scale.stopFullscreen();
+      else this.scale.startFullscreen();
+    };
+    fsbg.on('pointerdown', toggleFS);
+    fsbg.on('pointerover',  () => fstxt.setStyle({ fill: '#ffffff' }));
+    fsbg.on('pointerout',   () => fstxt.setStyle({ fill: '#44ccff' }));
+    this.input.keyboard.on('keydown-F', toggleFS);
+
     // Z → Ship Select with fade
     this.input.keyboard.once('keydown-Z', () => {
       this.cameras.main.fadeOut(220, 0, 0, 0);
@@ -599,11 +708,9 @@ class GameScene extends Phaser.Scene {
     // Player
     this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
-    // Tiny cockpit hitbox — 4px radius at the nose of the ship (scale-corrected)
-    // halfWidth = floor(r * scaleX) = 8 game-px collision radius
-    // center = (sprite.x, sprite.y - 12) — top-centre of the 64×64 display sprite
-    this.player.body.setCircle(4, 24, 12);
-    this.hitbox = this.add.image(W/2, H - 80 - 12, 'hitbox').setDepth(11).setAlpha(0);
+    // Small centered hitbox — 12×12 square at the sprite center (DoDonPachi style)
+    this.player.body.setSize(12, 12, true);
+    this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
 
     // Input
@@ -697,7 +804,7 @@ class GameScene extends Phaser.Scene {
     const vx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0) * spd;
     const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
     this.player.setVelocity(vx, vy);
-    this.hitbox.setPosition(this.player.x, this.player.y - 12).setAlpha(focused ? 1 : 0);
+    this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
     // Shooting
