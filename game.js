@@ -23,6 +23,15 @@ const State = {
   }
 };
 
+// ─── Music helper ─────────────────────────────────────────────────────────────
+let _music = null;
+function playMusic(scene, key, volume = 0.55) {
+  if (_music) { _music.stop(); _music.destroy(); _music = null; }
+  if (!key) return;
+  _music = scene.sound.add(key, { loop: true, volume });
+  _music.play();
+}
+
 // ─── Ship definitions ─────────────────────────────────────────────────────────
 const SHIPS = [
   {
@@ -313,6 +322,7 @@ function spawnBoss(scene, cfg) {
     boss.invulnerable = false;
     scene.bossActive = true;
     scene.showBossHUD(boss);
+    playMusic(scene, 'music_boss', 0.65);
     startBossMove(scene, boss, cfg.move);
 
     let pi = 0;
@@ -393,6 +403,12 @@ class BootScene extends Phaser.Scene {
     ['0012','0015','0019','0022'].forEach(n =>
       this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
     );
+    // Music
+    this.load.audio('music_main',   'assets/Audio/levelbm/maintheme.m4a');
+    this.load.audio('music_level1', 'assets/Audio/levelbm/level1.ogg');
+    this.load.audio('music_level2', 'assets/Audio/levelbm/level2.ogg');
+    this.load.audio('music_level3', 'assets/Audio/levelbm/level3.ogg');
+    this.load.audio('music_boss',   'assets/Audio/levelbm/boss.ogg');
   }
 
   create() {
@@ -408,6 +424,7 @@ class ShipSelectScene extends Phaser.Scene {
 
   create() {
     this.sel = State.ship || 0;
+    playMusic(this, 'music_main');
 
     this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0).setDepth(0);
     this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.4);
@@ -469,6 +486,8 @@ class GameScene extends Phaser.Scene {
     this.waveIdx   = 0;
     this.waveTimer = 0;
     this.levelDef  = LEVELS[(State.level - 1) % LEVELS.length];
+    const levelTrack = `music_level${Math.min(State.level, 3)}`;
+    playMusic(this, levelTrack);
     this.ship      = SHIPS[State.ship];
 
     // Background — zoomed in (tileScale) so seams stay off-screen; Y-scroll only
@@ -735,6 +754,7 @@ class GameScene extends Phaser.Scene {
 
   doGameOver(victory = false) {
     this.gameOver = true;
+    playMusic(this, null);
     if (!victory) this.spawnExplosion(this.player.x, this.player.y, 'large');
     this.player.setVisible(false);
 
