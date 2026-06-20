@@ -781,7 +781,7 @@ class GameScene extends Phaser.Scene {
     // Player
     this.player = this.physics.add.sprite(W/2, H - 80, this.ship.texture).setDepth(10).setScale(2);
     this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(12, 12, true);
+    this.player.body.setSize(7, 7, true);
 
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
@@ -955,7 +955,10 @@ class GameScene extends Phaser.Scene {
       }
     } else {
       this.sound.play('sfx_enemyhit', { volume: 0.35 });
-      this.tweens.add({ targets: enemy, alpha: 0.4, duration: 50, yoyo: true });
+      // Kill stacked tweens & reset alpha before flashing — prevents boss getting stuck transparent
+      this.tweens.killTweensOf(enemy);
+      enemy.setAlpha(1);
+      this.tweens.add({ targets: enemy, alpha: 0.35, duration: 45, yoyo: true });
     }
   }
 
