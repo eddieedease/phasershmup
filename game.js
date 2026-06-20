@@ -404,6 +404,12 @@ class BootScene extends Phaser.Scene {
       this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
     );
     // Music
+    // Sound effects
+    this.load.audio('sfx_shot',    'assets/Audio/effects/playershot.wav');
+    this.load.audio('sfx_hit',     'assets/Audio/effects/playerhit.wav');
+    this.load.audio('sfx_bomb',    'assets/Audio/effects/bomb.wav');
+    this.load.audio('sfx_powerup', 'assets/Audio/effects/power up.wav');
+    // Music
     this.load.audio('music_main',   'assets/Audio/levelbm/maintheme.ogg');
     this.load.audio('music_level1', 'assets/Audio/levelbm/level1.ogg');
     this.load.audio('music_level2', 'assets/Audio/levelbm/level2.ogg');
@@ -622,12 +628,14 @@ class GameScene extends Phaser.Scene {
   doShot() {
     if (this.shotCooldown > 0) return;
     this.shotCooldown = this.ship.fireRate;
+    this.sound.play('sfx_shot', { volume: 0.4 });
     this.ship.fire(this, this.player.x, this.player.y, State.powerLevel);
   }
 
   doLaser() {
     if (this.laserCooldown > 0) return;
     this.laserCooldown = 48;
+    this.sound.play('sfx_shot', { volume: 0.18 });
 
     const px = this.player.x, py = this.player.y;
     // Visual beam
@@ -674,6 +682,7 @@ class GameScene extends Phaser.Scene {
     this.invincible = 2500;
 
     // Dramatic hit feedback
+    this.sound.play('sfx_hit', { volume: 0.7 });
     this.cameras.main.shake(280, 0.018);
     this.cameras.main.flash(180, 255, 30, 30);
     this.flashText(player.x, player.y - 30, '-1 LIFE', '#f00');
@@ -695,12 +704,15 @@ class GameScene extends Phaser.Scene {
 
     if (type === 'power') {
       State.powerLevel = Math.min(State.powerLevel + 1, 4);
+      this.sound.play('sfx_powerup', { volume: 0.6 });
       this.flashText(px, py - 20, 'POWER UP!', '#ff0');
     } else if (type === 'life') {
       this.lives = Math.min(this.lives + 1, 5);
       State.lives = this.lives;
+      this.sound.play('sfx_powerup', { volume: 0.6 });
       this.flashText(px, py - 20, '1UP!', '#0f0');
     } else if (type === 'bomb') {
+      this.sound.play('sfx_bomb', { volume: 0.8 });
       this.flashText(px, py - 20, 'BOMB!', '#0ff');
       this.cameras.main.flash(300, 100, 200, 255);
       this.enemyBullets.getChildren().slice().forEach(b => b.destroy());
