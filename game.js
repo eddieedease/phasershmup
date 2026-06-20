@@ -689,6 +689,8 @@ class GameScene extends Phaser.Scene {
         if (!e.isBoss) { State.score += e.points || 100; this.spawnExplosion(e.x, e.y, 'small'); e.destroy(); }
         else { e.hp = Math.max(1, e.hp - 30); }
       });
+      // Clear spawn-wait flag so the wave check re-evaluates immediately
+      this.waveSpawning = false;
     }
     this.updateHUD();
   }
