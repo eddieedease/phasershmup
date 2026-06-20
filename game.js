@@ -617,8 +617,29 @@ class ShipSelectScene extends Phaser.Scene {
     this.add.tileSprite(0, 0, W, H, 'bg_stars') .setOrigin(0,0).setDepth(0);
     this.add.tileSprite(0, 0, W, H, 'bg_nebula').setOrigin(0,0).setDepth(1).setAlpha(0.4);
 
-    this.add.text(W/2, 60, 'SELECT YOUR SHIP', { font:'20px monospace', fill:'#fff' }).setOrigin(0.5).setDepth(5);
-    this.add.text(W/2, 88, 'ARROW KEYS · Z START · X SLOW+LASER · M MUTE', { font:'9px monospace', fill:'#888' }).setOrigin(0.5).setDepth(5);
+    this.add.text(W/2, 52, 'SELECT YOUR SHIP', { font:'20px monospace', fill:'#fff' }).setOrigin(0.5).setDepth(5);
+
+    // Control hint boxes
+    const controls = [
+      { key: '◀ ▶', label: 'MOVE' },
+      { key: 'Z',   label: 'START / SHOOT' },
+      { key: 'X',   label: 'SLOW + LASER' },
+      { key: 'M',   label: 'MUTE' },
+      { key: 'F',   label: 'FULLSCREEN' },
+    ];
+    const totalW = controls.length * 80 + (controls.length - 1) * 6;
+    let cx = W / 2 - totalW / 2;
+    const gy = this.add.graphics().setDepth(5);
+    controls.forEach(c => {
+      const bx = cx + 40;
+      gy.fillStyle(0x0a0a1a, 1);
+      gy.fillRoundedRect(cx, 74, 80, 32, 4);
+      gy.lineStyle(1, 0x2244aa, 1);
+      gy.strokeRoundedRect(cx, 74, 80, 32, 4);
+      this.add.text(bx, 82, c.key,   { font: 'bold 9px monospace', fill: '#88ccff' }).setOrigin(0.5, 0).setDepth(6);
+      this.add.text(bx, 93, c.label, { font: '7px monospace',      fill: '#556677' }).setOrigin(0.5, 0).setDepth(6);
+      cx += 86;
+    });
     this.muteLabel = this.add.text(W-8, 8, '', { font:'11px monospace', fill:'#888' }).setOrigin(1,0).setDepth(5);
     this.input.keyboard.on('keydown-M', () => {
       this.sound.mute = !this.sound.mute;
@@ -814,7 +835,7 @@ class GameScene extends Phaser.Scene {
     // Wing skew — nose stays forward, wings sweep back; hitbox unaffected
     // skewX > 0 → wings right (moving left), skewX < 0 → wings left (moving right)
     const targetSkew = vx < 0 ? 0.32 : vx > 0 ? -0.32 : 0;
-    this.player.setSkewX(this.player.skewX + (targetSkew - this.player.skewX) * 0.16);
+    this.player.skewX += (targetSkew - this.player.skewX) * 0.16;
 
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
