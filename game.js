@@ -487,7 +487,8 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this.gameOver     = false;
-    this.bossActive   = false;
+    this.bossActive    = false;
+    this.bossTriggered = false;
     this.wavesEnabled  = false; // held until level banner finishes
     this.pendingSpawns = 0;     // incremented per queued spawn, decremented on fire
     this.invincible   = 0;
