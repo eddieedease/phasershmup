@@ -53,7 +53,7 @@ const SHIPS = [
   },
   {
     name: 'THUNDERBOLT',
-    desc: 'Fast · Side cannons + forward burst',
+    desc: 'Fast · Forward burst',
     color: 0xffaa00,
     speed: 310,
     focusSpeed: 140,
@@ -99,21 +99,23 @@ const SHIPS = [
 
 function spawnPlayerBullet(scene, x, y, angleDeg, speed) {
   const rad = Phaser.Math.DegToRad(angleDeg);
-  const b = scene.playerBullets.create(x, y, 'bullet_p');
-  b.setDepth(8);
+  const b = scene.playerBullets.get(x, y, 'bullet_p');
+  if (!b) return null;
+  b.setActive(true).setVisible(true).setPosition(x, y).setScale(1).setAlpha(1);
   b.damage = 1;
+  b.body.reset(x, y);
   b.setVelocity(Math.cos(rad) * speed, Math.sin(rad) * speed);
-  b.body.allowGravity = false;
   return b;
 }
 
 function spawnLaser(scene, x, y, angleDeg, damage) {
   const rad = Phaser.Math.DegToRad(angleDeg - 90);
-  const b = scene.laserGroup.create(x, y, 'laser_bullet');
-  b.setDepth(8);
+  const b = scene.laserGroup.get(x, y, 'laser_bullet');
+  if (!b) return null;
+  b.setActive(true).setVisible(true).setPosition(x, y).setAlpha(1);
   b.damage = damage;
+  b.body.reset(x, y);
   b.setVelocity(Math.cos(rad) * 900, Math.sin(rad) * 900);
-  b.body.allowGravity = false;
   return b;
 }
 
@@ -145,12 +147,15 @@ function spawnEnemy(scene, x, y, cfg) {
 
 function fireBullet(scene, x, y, angle, speed, tint, scale) {
   const rad = Phaser.Math.DegToRad(angle);
-  const b = scene.enemyBullets.create(x, y, 'bullet_e');
-  b.setDepth(6);
-  b.setTint(tint || 0xff3300);
-  if (scale) b.setScale(scale);
+  const b = scene.enemyBullets.get(x, y, 'bullet_e');
+  if (!b) return null;
+  // All bullets use red/orange family — tint param kept for API compat but remapped
+  const baseTint = 0xff3300;
+  b.setActive(true).setVisible(true).setPosition(x, y).setScale(scale || 1).setAlpha(1);
+  b.setTint(baseTint);
+  b._baseTint = baseTint;
+  b.body.reset(x, y);
   b.setVelocity(Math.cos(rad) * speed, Math.sin(rad) * speed);
-  b.body.allowGravity = false;
   return b;
 }
 
@@ -181,20 +186,35 @@ const P = {
   },
   spiral(s, e) {
     e._sa = (e._sa || 0) + 25;
-    for (let i = 0; i < 3; i++) fireBullet(s, e.x, e.y, e._sa + i * 120, 170, 0xaa00ff);
+    for (let i = 0; i < 3; i++) fireBullet(s, e.x, e.y, e._sa + i * 120, 170);
   },
   vShape(s, e) {
     for (let i = 0; i < 5; i++) {
-      fireBullet(s, e.x, e.y, 80 + i * 8, 210, 0x00aaff);
-      fireBullet(s, e.x, e.y, 100 - i * 8, 210, 0x00aaff);
+      fireBullet(s, e.x, e.y, 80 + i * 8, 210);
+      fireBullet(s, e.x, e.y, 100 - i * 8, 210);
     }
   },
   crossAim(s, e) {
     aimAtPlayer(s, e, 200, 0, 1);
-    fireBullet(s, e.x, e.y, 0, 160, 0xff8800);
-    fireBullet(s, e.x, e.y, 90, 160, 0xff8800);
-    fireBullet(s, e.x, e.y, 180, 160, 0xff8800);
-    fireBullet(s, e.x, e.y, 270, 160, 0xff8800);
+    fireBullet(s, e.x, e.y, 0, 160);
+    fireBullet(s, e.x, e.y, 90, 160);
+    fireBullet(s, e.x, e.y, 180, 160);
+    fireBullet(s, e.x, e.y, 270, 160);
+  },
+  // New patterns for levels 4 & 5
+  aimed7:  (s, e) => aimAtPlayer(s, e, 210, 54, 7),
+  slowRing: (s, e) => radialBurst(s, e, 16, 95),   // slow wall — forces precise dodging
+  pincer(s, e) {                                    // two aimed fans from opposite sides
+    aimAtPlayer(s, e, 185, 20, 3);
+    s.time.delayedCall(200, () => { if (e.active) aimAtPlayer(s, e, 185, 20, 3); });
+  },
+  curtain(s, e) {                                   // horizontal sweep of bullets
+    for (let i = 0; i < 9; i++) fireBullet(s, 30 + i * 52, e.y, 90, 150, null, 1.2);
+  },
+  dualSpiral(s, e) {
+    e._sa = (e._sa || 0) + 18;
+    for (let i = 0; i < 4; i++) fireBullet(s, e.x, e.y, e._sa + i * 90, 175);
+    for (let i = 0; i < 4; i++) fireBullet(s, e.x, e.y, e._sa + 45 + i * 90, 130);
   }
 };
 
@@ -242,10 +262,13 @@ const LEVELS = [
           spawnEnemy(s, W-60, -30, { hp:4, points:180, vx:-40, vy:60, pattern:P.aimed1, patternDelay:1100 });
         });
       },
-      // 6 — v-shape spread swarm
+      // 6 — radial heavies flanked by aimed chaff
       s => {
-        for (let i = 0; i < 7; i++) s.queueSpawn(i * 260, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:140, vy:90, pattern:P.vShape, patternDelay:1200 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 480, () => {
+          spawnEnemy(s, 110 + i*90, -40, { texture:'ship_0015', hp:5, points:250, vy:46, pattern:P.radial8, patternDelay:1400 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(200 + i*360, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:85, pattern:P.aimed1, patternDelay:1500 });
         });
       },
       // 7 — side-weaving pairs + radial centre
@@ -445,6 +468,194 @@ const LEVELS = [
       patternDelay: 750,
       move: 'aggressive'
     })
+  },
+
+  // LEVEL 4 — CORONA BREACH (toxic green)
+  {
+    title: 'CORONA BREACH',
+    bgTint: 0x001a00,
+    nebulaTint: 0x44ff88,
+    overlayColor: 0x003300, overlayAlpha: 0.30,
+    music: 'music_level1',
+    waves: [
+      // 1 — slow ring openers — player must weave through
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 380, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:60, pattern:P.slowRing, patternDelay:1400 });
+        });
+      },
+      // 2 — pincer pairs
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 360, () => {
+          spawnEnemy(s, 70,   -30, { hp:5, points:250, vx:35, vy:65, pattern:P.pincer, patternDelay:1100 });
+          spawnEnemy(s, W-70, -30, { hp:5, points:250, vx:-35, vy:65, pattern:P.pincer, patternDelay:1100 });
+        });
+      },
+      // 3 — curtain + aimed chaff
+      s => {
+        s.queueSpawn(0, () => {
+          spawnEnemy(s, W/2, -40, { texture:'ship_0015', hp:10, points:500, vy:30, pattern:P.curtain, patternDelay:1600 });
+        });
+        for (let i = 0; i < 6; i++) s.queueSpawn(300 + i * 280, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:95, pattern:P.aimed3, patternDelay:950 });
+        });
+      },
+      // 4 — dual-spiral heavies
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 550, () => {
+          spawnEnemy(s, 80 + i*110, -40, { texture:'ship_0015', hp:10, points:500, vy:44, pattern:P.dualSpiral, patternDelay:220 });
+        });
+      },
+      // 5 — aimed-7 swarm
+      s => {
+        for (let i = 0; i < 7; i++) s.queueSpawn(i * 240, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:220, vy:100, pattern:P.aimed7, patternDelay:1050 });
+        });
+      },
+      // 6 — slow rings + dual spiral wall
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 430, () => {
+          spawnEnemy(s, 70 + i*90, -45, { texture:'ship_0015', hp:11, points:550, vy:38, pattern:P.slowRing, patternDelay:1200 });
+        });
+      },
+      // 7 — curtain spam
+      s => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 900, () => {
+          spawnEnemy(s, W*0.25, -40, { texture:'ship_0015', hp:9, points:450, vy:35, pattern:P.curtain, patternDelay:1500 });
+          spawnEnemy(s, W*0.75, -40, { texture:'ship_0015', hp:9, points:450, vy:35, pattern:P.dualSpiral, patternDelay:240 });
+        });
+      },
+      // 8 — pincer + slow ring mix
+      s => {
+        for (let i = 0; i < 8; i++) s.queueSpawn(i * 200, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:4, points:200, vy:105, pattern:(i%2===0?P.pincer:P.slowRing), patternDelay:1100 });
+        });
+      },
+      // 9 — aimed-7 + dual spiral finale
+      s => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 220, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:250, vy:110, pattern:P.aimed7, patternDelay:950 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(600 + i*500, () => {
+          spawnEnemy(s, 100+i*140, -45, { texture:'ship_0015', hp:12, points:600, vy:38, pattern:P.dualSpiral, patternDelay:200 });
+        });
+      },
+      // 10 — all together now
+      s => {
+        for (let i = 0; i < 8; i++) s.queueSpawn(i * 180, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:250, vy:115, pattern:P.aimed7, patternDelay:900 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(500 + i*550, () => {
+          spawnEnemy(s, 90+i*150, -50, { texture:'ship_0015', hp:13, points:650, vy:36, pattern:P.curtain, patternDelay:1400 });
+        });
+        s.queueSpawn(2200, () => {
+          spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:14, points:700, vy:30, pattern:P.slowRing, patternDelay:1100 });
+        });
+      },
+    ],
+    boss: s => spawnBoss(s, {
+      hp: 1300, points: 22000,
+      patterns: [P.dualSpiral, P.slowRing, P.aimed7, P.curtain],
+      patternDelay: 700,
+      move: 'figure8'
+    })
+  },
+
+  // LEVEL 5 — APEX (inferno gold — final stage)
+  {
+    title: 'APEX',
+    bgTint: 0x1a0a00,
+    nebulaTint: 0xff8800,
+    overlayColor: 0x440000, overlayAlpha: 0.38,
+    music: 'music_level2',
+    waves: [
+      // 1 — dense aimed-7 opener
+      s => {
+        for (let i = 0; i < 9; i++) s.queueSpawn(i * 180, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:280, vy:110, pattern:P.aimed7, patternDelay:950 });
+        });
+      },
+      // 2 — curtain wall from sides
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
+          spawnEnemy(s, 70,   -30, { hp:6, points:300, vx:40, vy:70, pattern:P.curtain, patternDelay:1300 });
+          spawnEnemy(s, W-70, -30, { hp:6, points:300, vx:-40, vy:70, pattern:P.dualSpiral, patternDelay:230 });
+        });
+      },
+      // 3 — slow ring maze
+      s => {
+        for (let i = 0; i < 7; i++) s.queueSpawn(i * 320, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:260, vy:70, pattern:P.slowRing, patternDelay:1100 });
+        });
+      },
+      // 4 — dual-spiral wall
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 480, () => {
+          spawnEnemy(s, 70 + i*90, -45, { texture:'ship_0015', hp:14, points:700, vy:42, pattern:P.dualSpiral, patternDelay:185 });
+        });
+      },
+      // 5 — pincer + aimed-7 + curtain chaos
+      s => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 250, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:280, vy:105, pattern:P.pincer, patternDelay:950 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(800 + i*500, () => {
+          spawnEnemy(s, 90+i*150, -45, { texture:'ship_0015', hp:14, points:700, vy:38, pattern:P.curtain, patternDelay:1300 });
+        });
+      },
+      // 6 — double radial + aimed-7 blitz
+      s => {
+        for (let i = 0; i < 8; i++) s.queueSpawn(i * 200, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:280, vy:115, pattern:P.aimed7, patternDelay:900 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(500 + i*480, () => {
+          spawnEnemy(s, 70+i*115, -45, { texture:'ship_0015', hp:12, points:600, vy:40, pattern:P.doubleRadial, patternDelay:850 });
+        });
+      },
+      // 7 — slow ring + curtain from all angles
+      s => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 350, () => {
+          spawnEnemy(s, 60+i*75, -45, { texture:'ship_0015', hp:13, points:650, vy:36, pattern:P.slowRing, patternDelay:1000 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(200+i*600, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:260, vy:120, pattern:P.aimed7, patternDelay:850 });
+        });
+      },
+      // 8 — mini-boss squad: three heavies simultaneously
+      s => {
+        s.queueSpawn(0, () => spawnEnemy(s, W*0.2, -50, { texture:'ship_0015', hp:18, points:900, vy:32, pattern:P.dualSpiral, patternDelay:180 }));
+        s.queueSpawn(0, () => spawnEnemy(s, W*0.5, -50, { texture:'ship_0015', hp:18, points:900, vy:32, pattern:P.slowRing, patternDelay:1000 }));
+        s.queueSpawn(0, () => spawnEnemy(s, W*0.8, -50, { texture:'ship_0015', hp:18, points:900, vy:32, pattern:P.dualSpiral, patternDelay:180 }));
+      },
+      // 9 — curtain + pincer hell
+      s => {
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 280, () => {
+          spawnEnemy(s, 70,   -30, { hp:6, points:300, vx:40, vy:75, pattern:P.pincer, patternDelay:900 });
+          spawnEnemy(s, W-70, -30, { hp:6, points:300, vx:-40, vy:75, pattern:P.curtain, patternDelay:1200 });
+        });
+        for (let i = 0; i < 5; i++) s.queueSpawn(400+i*240, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:280, vy:115, pattern:P.aimed7, patternDelay:880 });
+        });
+      },
+      // 10 — FINAL HELL: everything
+      s => {
+        for (let i = 0; i < 10; i++) s.queueSpawn(i * 150, () => {
+          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:5, points:280, vy:120, pattern:P.aimed7, patternDelay:850 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(400+i*500, () => {
+          spawnEnemy(s, 70+i*115, -50, { texture:'ship_0015', hp:15, points:750, vy:35, pattern:P.dualSpiral, patternDelay:175 });
+        });
+        for (let i = 0; i < 3; i++) s.queueSpawn(1000+i*700, () => {
+          spawnEnemy(s, 90+i*150, -50, { texture:'ship_0015', hp:14, points:700, vy:32, pattern:P.slowRing, patternDelay:950 });
+        });
+      },
+    ],
+    boss: s => spawnBoss(s, {
+      hp: 1800, points: 30000,
+      patterns: [P.dualSpiral, P.slowRing, P.aimed7, P.curtain, P.doubleRadial, P.crossAim],
+      patternDelay: 600,
+      move: 'aggressive'
+    })
   }
 ];
 
@@ -459,6 +670,9 @@ function spawnBoss(scene, cfg) {
   boss.isBoss  = true;
   boss.invulnerable = true; // immune during entry
   boss.body.allowGravity = false;
+  // setSize params are in SOURCE (unscaled) pixels — Phaser multiplies by scaleX internally.
+  // We want ~50px world hitbox: 50 / 3.2 ≈ 16. center=true auto-offsets using displayWidth.
+  boss.body.setSize(16, 16, true);
   boss.setVelocityY(50);
 
   // Stop dropping and start pattern after entering screen
@@ -610,18 +824,23 @@ class TitleScene extends Phaser.Scene {
 
     // Subtitle tagline
     this.add.text(W/2, H/2 + 36, 'G A L A C T I C   A S S A U L T', {
-      font: '8px monospace', fill: '#7799bb',
+      font: '11px monospace', fill: '#88bbdd',
     }).setOrigin(0.5).setDepth(4);
 
     // Blinking PRESS Z prompt
     this.pressZ = this.add.text(W/2, H * 0.72, 'PRESS  Z  TO  START', {
-      font: '13px monospace', fill: '#ffffff',
+      font: '16px monospace', fill: '#ffffff',
+      stroke: '#003355', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(4);
     this.tweens.add({ targets: this.pressZ, alpha: 0, duration: 540, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // Controls hint at bottom
-    this.add.text(W/2, H - 18, 'Z SHOOT · X SLOW+LASER · M MUTE', {
-      font: '7px monospace', fill: '#334455',
+    this.add.text(W/2, H - 30, 'Z SHOOT  ·  X SLOW+LASER  ·  M MUTE', {
+      font: '10px monospace', fill: '#667788',
+    }).setOrigin(0.5).setDepth(4);
+
+    this.add.text(W/2, H - 14, 'Made by EDease', {
+      font: '10px monospace', fill: '#8899aa',
     }).setOrigin(0.5).setDepth(4);
 
     // Mute
@@ -714,16 +933,18 @@ class ShipSelectScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown-H', () => this.scene.start('Highscore'));
 
-    this.add.text(W/2, H - 20, 'H — HIGHSCORES', { font:'11px monospace', fill:'#555' }).setOrigin(0.5).setDepth(5);
+    this.add.text(W/2, 118, 'Slow down to evade more intense patterns!', { font:'10px monospace', fill:'#88aacc' }).setOrigin(0.5, 0).setDepth(5);
+    this.add.text(W/2, H - 18, 'H — HIGHSCORES', { font:'11px monospace', fill:'#778899' }).setOrigin(0.5).setDepth(5);
   }
 
   makeCard(ship, i) {
     const cx = 80 + i * 160;
-    const cy = 320;
+    const cy = 310;
     const bg = this.add.rectangle(cx, cy, 130, 220, 0x111122).setDepth(3).setStrokeStyle(1, 0x334466);
-    const sprite = this.add.image(cx, cy - 60, ship.texture).setDepth(4).setScale(2);
+    const sprite = this.add.image(cx, cy - 60, ship.texture).setDepth(4).setScale(2.5);
     const name = this.add.text(cx, cy + 20, ship.name, { font:'11px monospace', fill:'#fff' }).setOrigin(0.5).setDepth(4);
-    const desc = this.add.text(cx, cy + 42, ship.desc, { font:'9px monospace', fill:'#aaa', wordWrap:{width:120} }).setOrigin(0.5).setDepth(4);
+    const descLines = ship.desc.split('·').map(s => '· ' + s.trim()).join('\n');
+    const desc = this.add.text(cx, cy + 42, descLines, { font:'9px monospace', fill:'#aaa', align:'left' }).setOrigin(0.5, 0).setDepth(4);
     return { bg, sprite, name, desc };
   }
 
@@ -733,9 +954,10 @@ class ShipSelectScene extends Phaser.Scene {
       const active = i === this.sel;
       c.bg.setFillStyle(active ? 0x1a1a44 : 0x111122);
       c.bg.setStrokeStyle(active ? 2 : 1, active ? 0x88aaff : 0x334466);
-      c.sprite.setTint(active ? SHIPS[i].color : 0x666666);
-      c.name.setFill(active ? '#fff' : '#666');
-      c.desc.setFill(active ? '#ccc' : '#444');
+      c.sprite.clearTint();
+      c.sprite.setAlpha(active ? 1 : 0.4);
+      c.name.setFill(active ? '#ffffff' : '#555');
+      c.desc.setVisible(active);
     });
   }
 }
@@ -757,7 +979,7 @@ class GameScene extends Phaser.Scene {
     this.waveIdx   = 0;
     this.waveTimer = 0;
     this.levelDef  = LEVELS[(State.level - 1) % LEVELS.length];
-    const levelTrack = `music_level${Math.min(State.level, 3)}`;
+    const levelTrack = this.levelDef.music || `music_level${Math.min(State.level, 3)}`;
     playMusic(this, levelTrack);
     this.ship      = SHIPS[State.ship];
 
@@ -775,11 +997,20 @@ class GameScene extends Phaser.Scene {
         .setOrigin(0, 0).setDepth(2.5);
     }
 
-    // Groups
-    this.playerBullets = this.physics.add.group();
-    this.laserGroup    = this.physics.add.group();
+    // Groups — bullet groups use pools so we recycle instead of allocate
+    this.playerBullets = this.physics.add.group({
+      maxSize: 200, classType: Phaser.Physics.Arcade.Image,
+      createCallback: o => { o.body.allowGravity = false; o.setDepth(8); }
+    });
+    this.laserGroup = this.physics.add.group({
+      maxSize: 60, classType: Phaser.Physics.Arcade.Image,
+      createCallback: o => { o.body.allowGravity = false; o.setDepth(8); }
+    });
     this.enemies       = this.physics.add.group();
-    this.enemyBullets  = this.physics.add.group();
+    this.enemyBullets  = this.physics.add.group({
+      maxSize: 400, classType: Phaser.Physics.Arcade.Image,
+      createCallback: o => { o.body.allowGravity = false; o.setDepth(6); }
+    });
     this.powerups      = this.physics.add.group();
 
     // Player
@@ -794,6 +1025,35 @@ class GameScene extends Phaser.Scene {
     this.cursors  = this.input.keyboard.createCursorKeys();
     this.fireKey  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
     this.focusKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+
+    // Gamepad
+    this.gamepad = null;
+    this.input.gamepad.once('connected', pad => { this.gamepad = pad; });
+
+    // Touch controls — only on mobile
+    this.touchShoot = false;
+    this.touchFocus = false;
+    this.touchMoveX = null;
+    this.touchMoveY = null;
+    const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    if (isMobile) {
+      this.input.addPointer(2);
+      // Button geometry
+      const btnW = 100, btnH = 64, pad = 14;
+      const shootX = W - btnW/2 - pad, shootY = H - btnH/2 - pad;
+      const laserX = W - btnW/2 - pad, laserY = shootY - btnH - 10;
+      this.shootZone = new Phaser.Geom.Rectangle(shootX - btnW/2, shootY - btnH/2, btnW, btnH);
+      this.laserZone = new Phaser.Geom.Rectangle(laserX - btnW/2, laserY - btnH/2, btnW, btnH);
+      const g = this.add.graphics().setDepth(28);
+      // Shoot button
+      g.fillStyle(0xff4400, 0.4); g.fillRoundedRect(this.shootZone.x, this.shootZone.y, btnW, btnH, 10);
+      g.lineStyle(2, 0xff8800, 0.9); g.strokeRoundedRect(this.shootZone.x, this.shootZone.y, btnW, btnH, 10);
+      this.add.text(shootX, shootY, 'SHOOT', { font: 'bold 14px monospace', fill: '#ffcc88' }).setOrigin(0.5).setDepth(29);
+      // Laser button
+      g.fillStyle(0x0055ff, 0.4); g.fillRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
+      g.lineStyle(2, 0x4499ff, 0.9); g.strokeRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
+      this.add.text(laserX, laserY, 'LASER', { font: 'bold 14px monospace', fill: '#88ccff' }).setOrigin(0.5).setDepth(29);
+    }
     this.input.keyboard.on('keydown-M', () => {
       this.sound.mute = !this.sound.mute;
       this.updateMuteLabel();
@@ -856,13 +1116,18 @@ class GameScene extends Phaser.Scene {
 
     this.scoreTxt.setText('SCORE ' + State.score);
 
-    // Cleanup off-screen projectiles
+    // Cleanup off-screen projectiles — deactivate back into pool
+    // Also animate enemy bullets: white flash every 200ms for 60ms — makes them pop
+    const flashOn = (this.time.now % 200) < 60;
     for (const b of this.playerBullets.getChildren())
-      if (b.y < -20 || b.x < -20 || b.x > W+20) b.destroy();
+      if (b.active && (b.y < -20 || b.x < -20 || b.x > W+20)) b.setActive(false).setVisible(false);
     for (const b of this.laserGroup.getChildren())
-      if (b.y < -20) b.destroy();
-    for (const b of this.enemyBullets.getChildren())
-      if (b.y > H+20 || b.x < -40 || b.x > W+40) b.destroy();
+      if (b.active && b.y < -20) b.setActive(false).setVisible(false);
+    for (const b of this.enemyBullets.getChildren()) {
+      if (!b.active) continue;
+      if (b.y > H+20 || b.x < -40 || b.x > W+40) { b.setActive(false).setVisible(false); continue; }
+      if (flashOn) b.setTintFill(0xffffff); else b.setTint(b._baseTint || 0xff3300);
+    }
     for (const e of this.enemies.getChildren()) {
       if (e.y > H+80 || e.x < -100 || e.x > W+100) { e.destroy(); continue; }
       // Rotate nose toward player (sprite faces down at rotation=0 due to flipY)
@@ -886,23 +1151,60 @@ class GameScene extends Phaser.Scene {
 
     if (!this.player || !this.player.active || !this.player.body) return;
 
-    const focused = this.focusKey.isDown;
-    const spd = focused ? this.ship.focusSpeed : this.ship.speed;
-    const vx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0) * spd;
-    const vy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0) * spd;
-    this.player.setVelocity(vx, vy);
+    // ── Touch pointer scan ────────────────────────────────────────────────
+    this.touchShoot = false;
+    this.touchFocus = false;
+    this.touchMoveX = null;
+    this.touchMoveY = null;
+    if (this.shootZone) {
+      const ptrs = [this.input.pointer1, this.input.pointer2, this.input.pointer3];
+      for (const p of ptrs) {
+        if (!p.isDown) continue;
+        if (this.shootZone.contains(p.x, p.y)) { this.touchShoot = true; }
+        else if (this.laserZone.contains(p.x, p.y)) { this.touchFocus = true; }
+        else { this.touchMoveX = p.x; this.touchMoveY = p.y; }
+      }
+    }
 
+    // ── Gamepad ───────────────────────────────────────────────────────────
+    const pad = this.gamepad && this.gamepad.connected ? this.gamepad : null;
+
+    // ── Movement ──────────────────────────────────────────────────────────
+    const focused = this.focusKey.isDown || this.touchFocus || (pad && pad.R2 > 0.3);
+    const spd = focused ? this.ship.focusSpeed : this.ship.speed;
+
+    let mvx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0);
+    let mvy = (this.cursors.up.isDown   ? -1 : this.cursors.down.isDown  ? 1 : 0);
+
+    if (pad) {
+      const ax = pad.leftStick.x, ay = pad.leftStick.y;
+      if (Math.abs(ax) > 0.12) mvx = ax;
+      else if (pad.left) mvx = -1; else if (pad.right) mvx = 1;
+      if (Math.abs(ay) > 0.12) mvy = ay;
+      else if (pad.up) mvy = -1; else if (pad.down) mvy = 1;
+    }
+
+    if (this.touchMoveX !== null) {
+      const dx = this.touchMoveX - this.player.x, dy = this.touchMoveY - this.player.y;
+      if (Math.abs(dx) > 6) mvx = Math.sign(dx);
+      if (Math.abs(dy) > 6) mvy = Math.sign(dy);
+    }
+
+    this.player.setVelocity(mvx * spd, mvy * spd);
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
-    // Shooting
+    // ── Shooting ──────────────────────────────────────────────────────────
     this.shotCooldown  = Math.max(0, this.shotCooldown - delta);
     this.laserCooldown = Math.max(0, this.laserCooldown - delta);
     this.laserBeam.clear();
 
-    if (this.fireKey.isDown) {
-      if (focused) { this.doLaser(); }
-      else         { this.doShot();  }
+    const fireDown  = this.fireKey.isDown || this.touchShoot || (pad && pad.A);
+    const laserDown = focused && (this.fireKey.isDown || this.touchFocus || (pad && pad.B));
+
+    if (fireDown) {
+      if (laserDown) { this.doLaser(); }
+      else           { this.doShot();  }
     }
   }
 
@@ -941,10 +1243,10 @@ class GameScene extends Phaser.Scene {
   // ── Collisions ────────────────────────────────────────────────────────────
 
   hitEnemy(bullet, enemy) {
-    if (enemy.invulnerable) { bullet.destroy(); return; }
+    if (enemy.invulnerable) { bullet.setActive(false).setVisible(false); return; }
     const dmg = bullet.damage || 1;
     enemy.hp -= dmg;
-    bullet.destroy();
+    bullet.setActive(false).setVisible(false);
 
     if (enemy.hp <= 0) {
       State.score += enemy.points || 100;
@@ -962,21 +1264,26 @@ class GameScene extends Phaser.Scene {
         spawnPowerup(this, ex, isHeavy);
       }
     } else {
-      this.sound.play('sfx_enemyhit', { volume: 0.35 });
-      // Kill stacked tweens & reset alpha before flashing — prevents boss getting stuck transparent
-      this.tweens.killTweensOf(enemy);
+      this.sound.play('sfx_enemyhit', { volume: 0.7, rate: 0.85 });
+      this.cameras.main.shake(55, 0.004);
+      // Only kill the previous flash tween, not movement tweens
+      if (enemy._flashTween) { enemy._flashTween.destroy(); enemy._flashTween = null; }
       enemy.setAlpha(1);
-      this.tweens.add({ targets: enemy, alpha: 0.35, duration: 45, yoyo: true });
+      enemy._flashTween = this.tweens.add({ targets: enemy, alpha: 0.35, duration: 45, yoyo: true });
     }
   }
 
   hitPlayer(obj, player) {
     if (this.invincible > 0) return;
-    if (this.enemyBullets.contains(obj)) obj.destroy();
+    if (this.enemyBullets.contains(obj)) obj.setActive(false).setVisible(false);
     this.lives--;
     State.lives = this.lives;
     this.livesTxt.setText('♥'.repeat(Math.max(0, this.lives)));
     this.invincible = 2500;
+    // Reset shot power on death
+    State.powerLevel = 0;
+    State.subPower = 0;
+    this.drawPowerBar();
 
     // Dramatic hit feedback
     this.sound.play('sfx_hit', { volume: 0.7 });
@@ -1025,7 +1332,7 @@ class GameScene extends Phaser.Scene {
       this.sound.play('sfx_bomb', { volume: 0.8 });
       this.flashText(px, py - 20, 'BOMB!', '#0ff');
       this.cameras.main.flash(300, 100, 200, 255);
-      this.enemyBullets.getChildren().slice().forEach(b => b.destroy());
+      this.enemyBullets.getChildren().forEach(b => b.setActive(false).setVisible(false));
       this.enemies.getChildren().slice().forEach(e => {
         if (!e.isBoss) { State.score += e.points || 100; this.spawnExplosion(e.x, e.y, 'small'); e.destroy(); }
         else { e.hp = Math.max(1, e.hp - 30); }
@@ -1355,7 +1662,7 @@ function makeStar(g, scene, key, count, size) {
 
 // ─── Phaser config ────────────────────────────────────────────────────────────
 const config = {
-  type: Phaser.CANVAS,
+  type: Phaser.AUTO,
   width: W,
   height: H,
   backgroundColor: '#000011',
@@ -1365,6 +1672,9 @@ const config = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  input: {
+    gamepad: true
   },
   physics: {
     default: 'arcade',
