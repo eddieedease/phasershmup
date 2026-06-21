@@ -707,9 +707,14 @@ function spawnBoss(scene, cfg) {
 
 function startBossMove(scene, boss, style) {
   if (style === 'sine') {
-    scene.tweens.add({ targets: boss, x: W-80, duration: 2200, ease:'Sine.easeInOut', yoyo:true, repeat:-1 });
+    // Slide to left edge first, then begin full-width sweep
+    scene.tweens.add({ targets: boss, x: 80, duration: 450, ease: 'Sine.easeInOut', onComplete: () => {
+      scene.tweens.add({ targets: boss, x: W-80, duration: 2200, ease:'Sine.easeInOut', yoyo:true, repeat:-1 });
+    }});
   } else if (style === 'figure8') {
-    scene.tweens.add({ targets: boss, x: W-80, y: 140, duration: 2000, ease:'Sine.easeInOut', yoyo:true, repeat:-1 });
+    scene.tweens.add({ targets: boss, x: 80, duration: 450, ease: 'Sine.easeInOut', onComplete: () => {
+      scene.tweens.add({ targets: boss, x: W-80, y: 140, duration: 2000, ease:'Sine.easeInOut', yoyo:true, repeat:-1 });
+    }});
     scene.time.delayedCall(1000, () => {
       scene.tweens.add({ targets: boss, y: 220, duration: 1800, ease:'Sine.easeInOut', yoyo:true, repeat:-1 });
     });
@@ -863,11 +868,13 @@ class TitleScene extends Phaser.Scene {
     fsbg.on('pointerout',   () => fstxt.setStyle({ fill: '#44ccff' }));
     this.input.keyboard.on('keydown-F', toggleFS);
 
-    // Z → Ship Select with fade
-    this.input.keyboard.once('keydown-Z', () => {
+    // Z or tap → Ship Select with fade
+    const goToSelect = () => {
       this.cameras.main.fadeOut(220, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ShipSelect'));
-    });
+    };
+    this.input.keyboard.once('keydown-Z', goToSelect);
+    this.input.once('pointerdown', goToSelect);
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
@@ -1028,14 +1035,16 @@ class GameScene extends Phaser.Scene {
 
     // Gamepad
     this.gamepad = null;
-    this.input.gamepad.once('connected', pad => { this.gamepad = pad; });
+    // 'connected' fires for new pads; for already-connected pads grab them in update
+    this.input.gamepad.on('connected', pad => { this.gamepad = pad; });
 
     // Touch controls — only on mobile
     this.touchShoot = false;
     this.touchFocus = false;
     this.touchMoveX = null;
     this.touchMoveY = null;
-    const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    // coarse pointer = touchscreen; fine pointer = mouse (desktop)
+    const isMobile = window.matchMedia('(pointer: coarse)').matches;
     if (isMobile) {
       this.input.addPointer(2);
       // Button geometry
@@ -1167,6 +1176,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // ── Gamepad ───────────────────────────────────────────────────────────
+    // Pick up pads that were already connected before the scene loaded
+    if (!this.gamepad && this.input.gamepad.total > 0) this.gamepad = this.input.gamepad.getPad(0);
     const pad = this.gamepad && this.gamepad.connected ? this.gamepad : null;
 
     // ── Movement ──────────────────────────────────────────────────────────
