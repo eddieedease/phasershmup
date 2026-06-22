@@ -6,12 +6,64 @@
   <title>EAser</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { background: #000; width: 100%; height: 100%; overflow: hidden; }
+    html, body { background: #000011; width: 100%; height: 100%; overflow: hidden; }
     #game { width: 100%; height: 100%; }
     canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+    #preloader {
+      position: fixed; inset: 0; background: #000011;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 100; font-family: monospace;
+    }
+    #preloader .logo {
+      font-size: 52px; font-weight: bold; letter-spacing: 2px;
+      color: #fff; margin-bottom: 6px;
+    }
+    #preloader .logo span { color: #ffd700; }
+    #preloader .sub {
+      font-size: 11px; letter-spacing: 6px; color: #4477aa;
+      margin-bottom: 48px; text-transform: uppercase;
+    }
+    #preloader .bar-wrap {
+      width: 200px; height: 4px;
+      background: #111133; border-radius: 2px; overflow: hidden;
+    }
+    #preloader .bar {
+      height: 100%; width: 0%; background: #ffd700;
+      border-radius: 2px;
+      animation: pulse-bar 1.4s ease-in-out infinite alternate;
+    }
+    @keyframes pulse-bar {
+      from { opacity: 0.6; } to { opacity: 1; }
+    }
+    #preloader .loading-txt {
+      margin-top: 14px; font-size: 9px; letter-spacing: 3px;
+      color: #334466; text-transform: uppercase;
+    }
+    /* stars */
+    #preloader .stars {
+      position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    }
+    #preloader .stars span {
+      position: absolute; width: 2px; height: 2px;
+      background: #fff; border-radius: 50%; opacity: 0;
+      animation: twinkle var(--d, 2s) var(--delay, 0s) infinite;
+    }
+    @keyframes twinkle {
+      0%,100% { opacity: 0; } 50% { opacity: var(--op, 0.7); }
+    }
   </style>
 </head>
-<body><div id="game"></div>
+<body>
+<div id="preloader">
+  <div class="stars" id="stars"></div>
+  <div class="logo"><span>EA</span>ser</div>
+  <div class="sub">Galactic Assault</div>
+  <div class="bar-wrap"><div class="bar" id="pbar"></div></div>
+  <div class="loading-txt">Loading&hellip;</div>
+</div>
+<div id="game"></div>
   <div id="err" style="color:#f55;font:14px monospace;padding:20px;position:fixed;top:0;left:0;z-index:9999;white-space:pre-wrap;display:none"></div>
   <script>
     window.onerror = function(msg, src, line, col, err) {
@@ -23,6 +75,35 @@
       var d = document.getElementById('err');
       d.style.display = 'block';
       d.textContent = 'UNHANDLED: ' + e.reason;
+    };
+
+    // Generate random stars
+    var starsEl = document.getElementById('stars');
+    for (var i = 0; i < 60; i++) {
+      var s = document.createElement('span');
+      s.style.cssText = 'left:' + Math.random()*100 + '%;top:' + Math.random()*100 + '%;'
+        + '--d:' + (1.2 + Math.random()*2.4).toFixed(1) + 's;'
+        + '--delay:' + (Math.random()*2).toFixed(1) + 's;'
+        + '--op:' + (0.3 + Math.random()*0.7).toFixed(2) + ';';
+      starsEl.appendChild(s);
+    }
+
+    // Animate the bar while scripts load (fake progress up to 85%, rest on ready)
+    var bar = document.getElementById('pbar');
+    var pct = 0;
+    var iv = setInterval(function() {
+      pct = Math.min(pct + (Math.random() * 4), 85);
+      bar.style.width = pct + '%';
+    }, 80);
+
+    window._preloaderDone = function() {
+      clearInterval(iv);
+      bar.style.width = '100%';
+      bar.style.animation = 'none';
+      var pre = document.getElementById('preloader');
+      pre.style.transition = 'opacity 0.4s';
+      pre.style.opacity = '0';
+      setTimeout(function() { pre.style.display = 'none'; }, 420);
     };
   </script>
   <script src="phaser.min.js"></script>

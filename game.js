@@ -42,14 +42,15 @@ const SHIPS = [
     speed: 240,
     focusSpeed: 110,
     texture: 'ship_0000',
-    fireRate: 90,
+    fireRate: 65,
     fire(scene, px, py, lvl) {
-      const spread = Math.min(lvl, 4);
+      const spread = Math.min(lvl + 1, 4); // 2–5 bullets
       const angles = [];
       for (let i = 0; i <= spread; i++) angles.push(-spread * 8 + i * 16);
-      angles.forEach(ang => spawnPlayerBullet(scene, px, py, ang - 90, 620));
+      // damage 2 per bullet — spread means not all hit one target, so effective DPS is balanced
+      angles.forEach(ang => { const b = spawnPlayerBullet(scene, px, py, ang - 90, 650); if (b) b.damage = 2; });
     },
-    laser(scene, px, py, dmg) { spawnLaser(scene, px, py, 0, dmg || 2); }
+    laser(scene, px, py, dmg) { spawnLaser(scene, px, py, 0, dmg); }
   },
   {
     name: 'THUNDERBOLT',
@@ -66,8 +67,10 @@ const SHIPS = [
       if (lvl >= 3) { spawnPlayerBullet(scene, px - 22, py + 10, -75, 580); spawnPlayerBullet(scene, px + 22, py + 10, -105, 580); }
     },
     laser(scene, px, py, dmg) {
-      spawnLaser(scene, px - 10, py, 0, dmg || 2);
-      spawnLaser(scene, px + 10, py, 0, dmg || 2);
+      // Two beams split the damage budget so total ≈ same as Valkyrie
+      const half = Math.ceil(dmg / 2);
+      spawnLaser(scene, px - 10, py, 0, half);
+      spawnLaser(scene, px + 10, py, 0, half);
     }
   },
   {
@@ -88,9 +91,11 @@ const SHIPS = [
       }
     },
     laser(scene, px, py, dmg) {
-      spawnLaser(scene, px, py, 0, (dmg || 2) + 1);
-      spawnLaser(scene, px - 12, py + 6, -5, dmg || 2);
-      spawnLaser(scene, px + 12, py + 6, 5, dmg || 2);
+      // Three beams split the budget — centre gets slightly more, fits the heavy role
+      const third = Math.max(1, Math.floor(dmg / 3));
+      spawnLaser(scene, px, py, 0, third + 1);
+      spawnLaser(scene, px - 12, py + 6, -5, third);
+      spawnLaser(scene, px + 12, py + 6, 5, third);
     }
   }
 ];
@@ -119,18 +124,43 @@ function spawnLaser(scene, x, y, angleDeg, damage) {
   return b;
 }
 
+// Fixed tint per sprite — gives each ship its own colour identity regardless of level
+const ENEMY_TINT = {
+  'ship_0012': 0x44ffff,   // cyan — fast scout
+  'ship_0013': 0xaaff44,   // lime — light fighter
+  'ship_0014': 0xff8844,   // orange — mid fighter
+  'ship_0015': 0xff3333,   // red — armoured
+  'ship_0016': 0xffff44,   // yellow — patrol
+  'ship_0017': 0xff44ff,   // magenta — void runner
+  'ship_0018': 0x44ff99,   // mint — assault
+  'ship_0019': 0xff6600,   // deep orange — heavy
+  'ship_0020': 0xff2288,   // hot pink — elite
+  'ship_0021': 0x9955ff,   // purple — champion
+  'ship_0022': 0xffdd00,   // gold — boss
+  'ship_0023': 0xff0044,   // crimson — apex boss
+};
+
 function spawnEnemy(scene, x, y, cfg) {
-  const e = scene.enemies.create(x, y, cfg.texture || 'ship_0012');
+  let tex = cfg.texture;
+  let isArmored = false;
+  if (!tex) {
+    tex = Phaser.Utils.Array.GetRandom(scene.levelEnemyTextures || ['ship_0012']);
+  } else if (tex === 'ship_0015') {
+    tex = Phaser.Utils.Array.GetRandom(scene.levelArmoredTextures || ['ship_0015']);
+    isArmored = true;
+  }
+  const e = scene.enemies.create(x, y, tex);
   e.setDepth(7);
-  e.setFlipY(true);   // grey sprites face up by default; flip to face player
+  e.setFlipY(true);
   e.setScale(cfg.scale || 1.5);
   e.hp      = cfg.hp     || 3;
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
   e.body.allowGravity = false;
-  e.body.setSize(20, 20, true); // smaller than the 32×32 sprite for fair hitboxes
+  e.body.setSize(20, 20, true);
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
-  if (cfg.tint) e.setTint(cfg.tint);
+  const tint = cfg.tint || ENEMY_TINT[tex];
+  if (tint) e.setTint(tint);
   if (cfg.scale) e.setScale(cfg.scale);
 
   if (cfg.pattern) {
@@ -220,163 +250,162 @@ const P = {
 
 // ─── Level definitions ────────────────────────────────────────────────────────
 const LEVELS = [
-  // LEVEL 1
+  // LEVEL 1 — SECTOR 1 (intro, very gentle)
   {
     title: 'SECTOR 1',
     bgTint: 0x000011,
     nebulaTint: null,
     overlayColor: 0x000033, overlayAlpha: 0,
+    enemyTextures: ['ship_0012', 'ship_0013'],
+    armoredTextures: ['ship_0015', 'ship_0014'],
+    bossTexture: 'ship_0021',
+    enemyTint: 0xff8844,      // orange — sector 1
+    armoredTint: 0xff5500,
+    bossTint: 0xffaa66,
     waves: [
-      // 1 — intro trickle, slow aimed shots
+      // 1 — single-file trickle, very slow shots
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 500, () => {
+          spawnEnemy(s, Phaser.Math.Between(80, W-80), -30, { hp:1, points:100, vy:55, pattern:P.aimed1, patternDelay:2400 });
+        });
+      },
+      // 2 — gentle pairs from sides
+      s => {
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 600, () => {
+          spawnEnemy(s, 80,   -30, { hp:1, points:100, vx:20, vy:55, pattern:P.aimed1, patternDelay:2200 });
+          spawnEnemy(s, W-80, -30, { hp:1, points:100, vx:-20, vy:55, pattern:P.aimed1, patternDelay:2200 });
+        });
+      },
+      // 3 — slow diagonal sweep
       s => {
         for (let i = 0; i < 5; i++) s.queueSpawn(i * 380, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:75, pattern:P.aimed1, patternDelay:1800 });
+          spawnEnemy(s, 60 + i*72, -30, { hp:2, points:110, vx:18, vy:60, pattern:P.aimed1, patternDelay:2000 });
         });
       },
-      // 2 — pairs from sides
+      // 4 — first heavier ships, large patternDelay
+      s => {
+        for (let i = 0; i < 2; i++) s.queueSpawn(i * 900, () => {
+          spawnEnemy(s, 130 + i*220, -40, { texture:'ship_0015', hp:4, points:200, vy:40, pattern:P.radial8, patternDelay:2000 });
+        });
+      },
+      // 5 — aimed trio, still slow
       s => {
         for (let i = 0; i < 4; i++) s.queueSpawn(i * 420, () => {
-          spawnEnemy(s, 70,   -30, { hp:3, points:120, vx:30, vy:65, pattern:P.aimed1, patternDelay:1400 });
-          spawnEnemy(s, W-70, -30, { hp:3, points:120, vx:-30, vy:65, pattern:P.aimed1, patternDelay:1400 });
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:120, vy:65, pattern:P.aimed1, patternDelay:1900 });
         });
       },
-      // 3 — diagonal sweep left-to-right
+      // 6 — weaving pairs + one radial in centre
       s => {
-        for (let i = 0; i < 6; i++) s.queueSpawn(i * 300, () => {
-          spawnEnemy(s, 60 + i * 60, -30, { hp:2, points:110, vx:25, vy:80, pattern:P.aimed1, patternDelay:1500 });
-        });
-      },
-      // 4 — first armoured ships with radial bursts
-      s => {
-        for (let i = 0; i < 3; i++) s.queueSpawn(i * 650, () => {
-          spawnEnemy(s, 110 + i*130, -40, { texture:'ship_0015', hp:5, points:250, vy:48, pattern:P.radial8, patternDelay:1400 });
-        });
-      },
-      // 5 — fast aimed trio + flankers
-      s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 300, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:95, pattern:P.aimed3, patternDelay:1200 });
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 500, () => {
+          spawnEnemy(s, 70,   -30, { hp:2, points:120, vx:30, vy:60, pattern:P.aimed1, patternDelay:1800 });
+          spawnEnemy(s, W-70, -30, { hp:2, points:120, vx:-30, vy:60, pattern:P.aimed1, patternDelay:1800 });
         });
         s.queueSpawn(800, () => {
-          spawnEnemy(s, 60,   -30, { hp:4, points:180, vx:40, vy:60, pattern:P.aimed1, patternDelay:1100 });
-          spawnEnemy(s, W-60, -30, { hp:4, points:180, vx:-40, vy:60, pattern:P.aimed1, patternDelay:1100 });
+          spawnEnemy(s, W/2, -40, { texture:'ship_0015', hp:5, points:250, vy:38, pattern:P.radial8, patternDelay:1800 });
         });
       },
-      // 6 — radial heavies flanked by aimed chaff
+      // 7 — slightly faster swarm
       s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 480, () => {
-          spawnEnemy(s, 110 + i*90, -40, { texture:'ship_0015', hp:5, points:250, vy:46, pattern:P.radial8, patternDelay:1400 });
-        });
-        for (let i = 0; i < 4; i++) s.queueSpawn(200 + i*360, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:2, points:100, vy:85, pattern:P.aimed1, patternDelay:1500 });
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:120, vy:70, pattern:P.aimed1, patternDelay:1700 });
         });
       },
-      // 7 — side-weaving pairs + radial centre
-      s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 450, () => {
-          spawnEnemy(s, 60,   -30, { hp:3, points:130, vx:50, vy:70, pattern:P.aimed1, patternDelay:1100 });
-          spawnEnemy(s, W-60, -30, { hp:3, points:130, vx:-50, vy:70, pattern:P.aimed1, patternDelay:1100 });
-        });
-        s.queueSpawn(600, () => {
-          spawnEnemy(s, W/2, -40, { texture:'ship_0015', hp:6, points:300, vy:44, pattern:P.radial8, patternDelay:1300 });
-        });
-      },
-      // 8 — miniboss warmup: two heavy ships
+      // 8 — pre-boss warmup: single heavy
       s => {
         s.queueSpawn(0, () => {
-          spawnEnemy(s, W*0.3, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
-        });
-        s.queueSpawn(600, () => {
-          spawnEnemy(s, W*0.7, -50, { texture:'ship_0015', hp:8, points:400, vy:40, pattern:P.doubleRadial, patternDelay:1100 });
+          spawnEnemy(s, W/2, -50, { texture:'ship_0015', hp:7, points:350, vy:36, pattern:P.doubleRadial, patternDelay:1600 });
         });
       },
     ],
     boss: s => spawnBoss(s, {
-      hp: 300, points: 5000,
-      patterns: [P.doubleRadial, P.aimed3],
-      patternDelay: 1000,
-      move: 'sine'
+      hp: 280, points: 5000,
+      patterns: [P.radial8, P.aimed3],
+      patternDelay: 1200,
+      move: 'roam'
     })
   },
 
-  // LEVEL 2
+  // LEVEL 2 — NEBULA CROSS (slightly harder, new players still comfortable)
   {
     title: 'NEBULA CROSS',
     bgTint: 0x000820,
     nebulaTint: 0x88bbff,
     overlayColor: 0x0044cc, overlayAlpha: 0.28,
+    enemyTextures: ['ship_0016', 'ship_0013'],
+    armoredTextures: ['ship_0015', 'ship_0016'],
+    bossTexture: 'ship_0022',
+    enemyTint: 0x00ffcc,      // teal/mint — nebula cross
+    armoredTint: 0x00ddaa,
+    bossTint: 0x44ffdd,
     waves: [
-      // 1 — fast aimed triple
+      // 1 — aimed1 opener, moderate speed
       s => {
-        for (let i = 0; i < 6; i++) s.queueSpawn(i * 280, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1200 });
+        for (let i = 0; i < 5; i++) s.queueSpawn(i * 380, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:130, vy:70, pattern:P.aimed1, patternDelay:1800 });
         });
       },
-      // 2 — v-shape flankers
+      // 2 — side pairs, aimed1
       s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 320, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:160, vy:80, pattern:P.vShape, patternDelay:1300 });
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 550, () => {
+          spawnEnemy(s, 70,   -30, { hp:2, points:130, vx:28, vy:65, pattern:P.aimed1, patternDelay:1600 });
+          spawnEnemy(s, W-70, -30, { hp:2, points:130, vx:-28, vy:65, pattern:P.aimed1, patternDelay:1600 });
         });
       },
-      // 3 — radial armoured column
+      // 3 — first aimed3 — introduce spread shots
       s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 520, () => {
-          spawnEnemy(s, 80 + i*107, -30, { texture:'ship_0015', hp:6, points:300, vy:42, pattern:P.radial8, patternDelay:1200 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 420, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:140, vy:70, pattern:P.aimed3, patternDelay:1800 });
         });
       },
-      // 4 — cross-fire side pairs + aimed centre
+      // 4 — radial column, slow
       s => {
-        for (let i = 0; i < 3; i++) s.queueSpawn(i * 500, () => {
-          spawnEnemy(s, 70,   -30, { hp:4, points:180, vx:35, vy:70, pattern:P.aimed3, patternDelay:1100 });
-          spawnEnemy(s, W-70, -30, { hp:4, points:180, vx:-35, vy:70, pattern:P.aimed3, patternDelay:1100 });
-        });
-        for (let i = 0; i < 4; i++) s.queueSpawn(200 + i * 350, () => {
-          spawnEnemy(s, Phaser.Math.Between(100, W-100), -30, { hp:3, points:150, vy:85, pattern:P.aimed1, patternDelay:1000 });
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 650, () => {
+          spawnEnemy(s, 100 + i*140, -40, { texture:'ship_0015', hp:5, points:260, vy:40, pattern:P.radial8, patternDelay:1600 });
         });
       },
-      // 5 — spiral column
+      // 5 — vShape intro — first time player sees spread
+      s => {
+        for (let i = 0; i < 4; i++) s.queueSpawn(i * 450, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:140, vy:65, pattern:P.vShape, patternDelay:1800 });
+        });
+      },
+      // 6 — mixed aimed1 + aimed3
+      s => {
+        for (let i = 0; i < 6; i++) s.queueSpawn(i * 300, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:140, vy:75, pattern: i%2===0 ? P.aimed1 : P.aimed3, patternDelay:1600 });
+        });
+      },
+      // 7 — double radial heavies
       s => {
         for (let i = 0; i < 3; i++) s.queueSpawn(i * 700, () => {
-          spawnEnemy(s, 80 + i*160, -40, { texture:'ship_0015', hp:7, points:350, vy:35, pattern:P.spiral, patternDelay:220 });
+          spawnEnemy(s, 100 + i*140, -45, { texture:'ship_0015', hp:7, points:350, vy:36, pattern:P.doubleRadial, patternDelay:1400 });
         });
       },
-      // 6 — dense swarm
+      // 8 — side weave + aimed3 swarm
       s => {
-        for (let i = 0; i < 10; i++) s.queueSpawn(i * 180, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:100, pattern:P.aimed3, patternDelay:1100 });
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 500, () => {
+          spawnEnemy(s, 70,   -30, { hp:3, points:150, vx:35, vy:65, pattern:P.aimed3, patternDelay:1400 });
+          spawnEnemy(s, W-70, -30, { hp:3, points:150, vx:-35, vy:65, pattern:P.aimed3, patternDelay:1400 });
+        });
+        for (let i = 0; i < 4; i++) s.queueSpawn(300 + i*320, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:130, vy:75, pattern:P.aimed1, patternDelay:1700 });
         });
       },
-      // 7 — double radial heavies + aimed chaff
+      // 9 — spiral heavies + aimed chaff
       s => {
-        for (let i = 0; i < 3; i++) s.queueSpawn(i * 600, () => {
-          spawnEnemy(s, 100 + i*140, -45, { texture:'ship_0015', hp:9, points:450, vy:38, pattern:P.doubleRadial, patternDelay:1000 });
+        for (let i = 0; i < 3; i++) s.queueSpawn(i * 650, () => {
+          spawnEnemy(s, 90 + i*150, -40, { texture:'ship_0015', hp:8, points:400, vy:34, pattern:P.spiral, patternDelay:240 });
         });
-        for (let i = 0; i < 4; i++) s.queueSpawn(300 + i * 300, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:90, pattern:P.aimed3, patternDelay:1100 });
-        });
-      },
-      // 8 — crossfire wall
-      s => {
-        for (let i = 0; i < 5; i++) s.queueSpawn(i * 350, () => {
-          spawnEnemy(s, 60,   -30, { texture:'ship_0015', hp:7, points:350, vx:40, vy:55, pattern:P.crossAim, patternDelay:1000 });
-          spawnEnemy(s, W-60, -30, { texture:'ship_0015', hp:7, points:350, vx:-40, vy:55, pattern:P.crossAim, patternDelay:1000 });
-        });
-      },
-      // 9 — spiral carpet + fast aimed
-      s => {
-        for (let i = 0; i < 4; i++) s.queueSpawn(i * 550, () => {
-          spawnEnemy(s, 90 + i*100, -40, { texture:'ship_0015', hp:8, points:400, vy:36, pattern:P.spiral, patternDelay:200 });
-        });
-        for (let i = 0; i < 6; i++) s.queueSpawn(150 + i * 250, () => {
-          spawnEnemy(s, Phaser.Math.Between(60, W-60), -30, { hp:3, points:150, vy:100, pattern:P.aimed3, patternDelay:1000 });
+        for (let i = 0; i < 4; i++) s.queueSpawn(200 + i*300, () => {
+          spawnEnemy(s, Phaser.Math.Between(70, W-70), -30, { hp:2, points:130, vy:75, pattern:P.aimed3, patternDelay:1500 });
         });
       },
     ],
     boss: s => spawnBoss(s, {
-      hp: 550, points: 9000,
-      patterns: [P.radial12, P.aimed5, P.spiral],
-      patternDelay: 900,
-      move: 'figure8'
+      hp: 500, points: 9000,
+      patterns: [P.radial8, P.aimed3, P.spiral],
+      patternDelay: 1000,
+      move: 'roam'
     })
   },
 
@@ -385,6 +414,12 @@ const LEVELS = [
     title: 'VOID GATE',
     bgTint: 0x100008,
     nebulaTint: 0xff6688,
+    enemyTextures: ['ship_0017', 'ship_0018'],
+    armoredTextures: ['ship_0018', 'ship_0019'],
+    bossTexture: 'ship_0022',
+    enemyTint: 0xff2266,      // hot pink/magenta — void gate
+    armoredTint: 0xdd0044,
+    bossTint: 0xff44aa,
     overlayColor: 0x880011, overlayAlpha: 0.32,
     waves: [
       // 1 — fast aimed swarm
@@ -476,6 +511,12 @@ const LEVELS = [
     bgTint: 0x001a00,
     nebulaTint: 0x44ff88,
     overlayColor: 0x003300, overlayAlpha: 0.30,
+    enemyTextures: ['ship_0019', 'ship_0020'],
+    armoredTextures: ['ship_0020', 'ship_0021'],
+    bossTexture: 'ship_0023',
+    enemyTint: 0x44ff00,      // lime green — corona breach
+    armoredTint: 0x22cc00,
+    bossTint: 0x88ff44,
     music: 'music_level1',
     waves: [
       // 1 — slow ring openers — player must weave through
@@ -567,6 +608,12 @@ const LEVELS = [
     bgTint: 0x1a0a00,
     nebulaTint: 0xff8800,
     overlayColor: 0x440000, overlayAlpha: 0.38,
+    enemyTextures: ['ship_0020', 'ship_0021'],
+    armoredTextures: ['ship_0021', 'ship_0023'],
+    bossTexture: 'ship_0023',
+    enemyTint: 0xffee00,      // pure gold — apex
+    armoredTint: 0xffbb00,
+    bossTint: 0xffdd44,
     music: 'music_level2',
     waves: [
       // 1 — dense aimed-7 opener
@@ -661,8 +708,11 @@ const LEVELS = [
 
 // ─── Boss spawner ─────────────────────────────────────────────────────────────
 function spawnBoss(scene, cfg) {
-  const boss = scene.enemies.create(W/2, -80, 'ship_0022');
+  const boss = scene.enemies.create(W/2, -80, cfg.texture || scene.levelBossTexture || 'ship_0022');
   boss.setDepth(7).setScale(3.2).setFlipY(true);
+  const bossTex = cfg.texture || scene.levelBossTexture || 'ship_0022';
+  const bossTint = ENEMY_TINT[bossTex];
+  if (bossTint) boss.setTint(bossTint);
   boss.hp      = cfg.hp;
   boss.maxHp   = cfg.hp;
   boss.points  = cfg.points;
@@ -732,16 +782,52 @@ function startBossMove(scene, boss, style) {
       } else { scene.time.delayedCall(1000, charge); }
     };
     scene.time.delayedCall(500, charge);
+  } else if (style === 'roam') {
+    // Random waypoint roaming; at < 50% HP intervals shorten and player charges appear
+    const nextWaypoint = () => {
+      if (!boss.active) return;
+      const enraged = boss.hp != null && boss.maxHp != null && boss.hp / boss.maxHp < 0.5;
+      const tx = Phaser.Math.Between(70, W - 70);
+      const ty = Phaser.Math.Between(60, 200);
+      const dur = enraged ? Phaser.Math.Between(600, 1100) : Phaser.Math.Between(900, 1700);
+      scene.tweens.add({
+        targets: boss, x: tx, y: ty, duration: dur, ease: enraged ? 'Power2' : 'Sine.easeInOut',
+        onComplete: () => scene.time.delayedCall(Phaser.Math.Between(150, 500), nextWaypoint)
+      });
+      if (enraged && scene.player && scene.player.active && Math.random() < 0.35) {
+        scene.time.delayedCall(80, () => {
+          if (!boss.active) return;
+          // Only kill move tweens, preserve any flash tween
+          if (boss._moveTween) { boss._moveTween.stop(); boss._moveTween = null; }
+          boss._moveTween = scene.tweens.add({ targets: boss, x: scene.player.x, duration: 380, ease: 'Power3',
+            onComplete: () => { boss._moveTween = null; nextWaypoint(); } });
+        });
+      }
+    };
+    scene.tweens.add({ targets: boss, x: Phaser.Math.Between(80, W-80), duration: 550, ease: 'Sine.easeInOut',
+      onComplete: nextWaypoint });
   }
 }
 
 // ─── Power-up types ───────────────────────────────────────────────────────────
-const POWERUP_TYPES       = ['power', 'power', 'power', 'power', 'bomb'];         // regular enemies
-const POWERUP_TYPES_HEAVY = ['power', 'power', 'power', 'bomb',  'power', 'life']; // armoured/boss
+const POWERUP_TYPES       = ['power', 'power', 'power', 'power', 'bomb'];
+const POWERUP_TYPES_HEAVY = ['power', 'power', 'power', 'bomb',  'power', 'life'];
+// Per-level drop budget — prevents feast-or-famine RNG
+const PU_BUDGET = { power: 8, bomb: 3, life: 1 };
 
 function spawnPowerup(scene, x, heavy = false) {
   const pool = heavy ? POWERUP_TYPES_HEAVY : POWERUP_TYPES;
-  const type = Phaser.Utils.Array.GetRandom(pool);
+  let type = Phaser.Utils.Array.GetRandom(pool);
+  // Enforce budget: if this type is capped, try alternatives in priority order
+  const d = scene.puDropped;
+  if (d) {
+    const order = ['power', 'bomb', 'life'];
+    if ((d[type] || 0) >= PU_BUDGET[type]) {
+      type = order.find(t => (d[t] || 0) < PU_BUDGET[t]);
+      if (!type) return null; // all budgets exhausted — no drop
+    }
+    d[type] = (d[type] || 0) + 1;
+  }
   const key = type === 'life' ? 'pu_life' : type === 'bomb' ? 'pu_bomb' : 'pu_power';
   // Drift in from the top at a random x, slow fall
   const spawnX = x !== undefined ? Phaser.Math.Clamp(x, 24, W - 24) : Phaser.Math.Between(24, W - 24);
@@ -768,8 +854,8 @@ class BootScene extends Phaser.Scene {
     ['0000','0001','0003'].forEach(n =>
       this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
     );
-    // Enemy ships — grey sprites
-    ['0012','0015','0019','0022'].forEach(n =>
+    // Enemy ships
+    ['0012','0013','0014','0015','0016','0017','0018','0019','0020','0021','0022','0023'].forEach(n =>
       this.load.image(`ship_${n}`, `assets/Ships/ship_${n}.png`)
     );
     // Music
@@ -791,6 +877,7 @@ class BootScene extends Phaser.Scene {
   create() {
     makeTextures(this);
     State.loadScores();
+    if (window._preloaderDone) window._preloaderDone();
     this.scene.start('Title');
   }
 }
@@ -868,19 +955,27 @@ class TitleScene extends Phaser.Scene {
     fsbg.on('pointerout',   () => fstxt.setStyle({ fill: '#44ccff' }));
     this.input.keyboard.on('keydown-F', toggleFS);
 
-    // Z or tap → Ship Select with fade
-    const goToSelect = () => {
+    // Z / tap / gamepad → Ship Select with fade
+    this._gone = false;
+    this.goToSelect = () => {
+      if (this._gone) return;
+      this._gone = true;
       this.cameras.main.fadeOut(220, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ShipSelect'));
     };
-    this.input.keyboard.once('keydown-Z', goToSelect);
-    this.input.once('pointerdown', goToSelect);
+    this.input.keyboard.once('keydown-Z', this.goToSelect);
+    this.input.once('pointerdown', this.goToSelect);
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
 
   update() {
     this.bg.tilePositionY -= 0.6;
+    // Gamepad: any face button advances past title
+    if (!this._gone && this.input.gamepad.total > 0) {
+      const pad = this.input.gamepad.getPad(0);
+      if (pad && (pad.A || pad.B || pad.X || pad.Y || pad.start)) this.goToSelect();
+    }
   }
 }
 
@@ -931,14 +1026,27 @@ class ShipSelectScene extends Phaser.Scene {
     this.cards = SHIPS.map((ship, i) => this.makeCard(ship, i));
     this.highlight();
 
+    const startGame = () => {
+      State.ship = this.sel; State.score = 0; State.level = 1;
+      State.lives = 3; State.powerLevel = 0; State.subPower = 0;
+      this.scene.start('Game');
+    };
     this.input.keyboard.on('keydown-LEFT',  () => { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); });
     this.input.keyboard.on('keydown-RIGHT', () => { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); });
-    this.input.keyboard.on('keydown-Z', () => {
-      State.ship = this.sel;
-      State.score = 0; State.level = 1; State.lives = 3; State.powerLevel = 0; State.subPower = 0;
-      this.scene.start('Game');
-    });
+    this.input.keyboard.on('keydown-Z', startGame);
     this.input.keyboard.on('keydown-H', () => this.scene.start('Highscore'));
+
+    // Mobile: tap left/right thirds to change ship, tap centre third to start
+    this.input.on('pointerdown', pointer => {
+      if (pointer.x < W / 3)      { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); }
+      else if (pointer.x > W * 2/3) { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); }
+      else                           { startGame(); }
+    });
+
+    // Show tap hint on mobile
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      this.add.text(W/2, H - 50, '◀ TAP LEFT/RIGHT TO CHANGE  ·  TAP CENTRE TO START ▶', { font:'7px monospace', fill:'#556677' }).setOrigin(0.5).setDepth(5);
+    }
 
     this.add.text(W/2, 118, 'Slow down to evade more intense patterns!', { font:'10px monospace', fill:'#88aacc' }).setOrigin(0.5, 0).setDepth(5);
     this.add.text(W/2, H - 18, 'H — HIGHSCORES', { font:'11px monospace', fill:'#778899' }).setOrigin(0.5).setDepth(5);
@@ -967,6 +1075,23 @@ class ShipSelectScene extends Phaser.Scene {
       c.desc.setVisible(active);
     });
   }
+
+  update() {
+    if (this.input.gamepad.total === 0) return;
+    const pad = this.input.gamepad.getPad(0);
+    if (!pad) return;
+    // Debounce gamepad input
+    if (!this._padCool) this._padCool = 0;
+    this._padCool -= 16;
+    if (this._padCool > 0) return;
+    if (pad.left  || pad.leftStick.x < -0.4) { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); this._padCool = 250; }
+    if (pad.right || pad.leftStick.x >  0.4) { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); this._padCool = 250; }
+    if (pad.A || pad.start) {
+      State.ship = this.sel; State.score = 0; State.level = 1;
+      State.lives = 3; State.powerLevel = 0; State.subPower = 0;
+      this.scene.start('Game');
+    }
+  }
 }
 
 // ── Game ──────────────────────────────────────────────────────────────────────
@@ -989,6 +1114,12 @@ class GameScene extends Phaser.Scene {
     const levelTrack = this.levelDef.music || `music_level${Math.min(State.level, 3)}`;
     playMusic(this, levelTrack);
     this.ship      = SHIPS[State.ship];
+    // Per-level texture pools for variety
+    this.levelEnemyTextures   = this.levelDef.enemyTextures   || ['ship_0012'];
+    this.levelArmoredTextures = this.levelDef.armoredTextures || ['ship_0015'];
+    this.levelBossTexture     = this.levelDef.bossTexture     || 'ship_0022';
+    // Powerup budget for this level — caps total drops
+    this.puDropped = { power: 0, bomb: 0, life: 0 };
 
     // Background — zoomed in (tileScale) so seams stay off-screen; Y-scroll only
     this.bgStars  = this.add.tileSprite(W/2, H/2, W, H, 'bg_stars')
@@ -1210,12 +1341,11 @@ class GameScene extends Phaser.Scene {
     this.laserCooldown = Math.max(0, this.laserCooldown - delta);
     this.laserBeam.clear();
 
-    const fireDown  = this.fireKey.isDown || this.touchShoot || (pad && pad.A);
-    const laserDown = focused && (this.fireKey.isDown || this.touchFocus || (pad && pad.B));
-
-    if (fireDown) {
-      if (laserDown) { this.doLaser(); }
-      else           { this.doShot();  }
+    // X (focus key) alone fires laser — no need to hold Z simultaneously
+    if (focused || this.touchFocus || (pad && pad.B)) {
+      this.doLaser();
+    } else if (this.fireKey.isDown || this.touchShoot || (pad && pad.A)) {
+      this.doShot();
     }
   }
 
@@ -1291,9 +1421,14 @@ class GameScene extends Phaser.Scene {
     State.lives = this.lives;
     this.livesTxt.setText('♥'.repeat(Math.max(0, this.lives)));
     this.invincible = 2500;
-    // Reset shot power on death
-    State.powerLevel = 0;
-    State.subPower = 0;
+    // Drop one power tier on death
+    if (State.powerLevel > 0) {
+      State.powerLevel--;
+      State.subPower = 0;
+    } else {
+      State.subPower = Math.max(0, State.subPower - 1);
+    }
+    this.flashText(this.player.x, this.player.y - 45, '-POWER', '#ff6600');
     this.drawPowerBar();
 
     // Dramatic hit feedback
