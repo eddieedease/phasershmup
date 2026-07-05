@@ -98,7 +98,7 @@ const SHIPS = [
     speed: 180,
     focusSpeed: 80,
     power: 0.85,
-    texture: 'nship_5',   // big 128px heavy cruiser — fits the tank role
+    texture: 'nship_3',   // sleek fighter silhouette — reads as a ship, not the "moth" family the other nships share
     centerFrame: 0,
     bank: false,
     scale: 0.5,
@@ -609,7 +609,7 @@ const LEVELS = [
       { key:'bg_space2_ground', scale:1.2, speed:30, loop:'clamp', depth:1 },
     ]},
     enemyTextures: ['ship_0016', 'ship_0013'],
-    armoredTextures: ['eship_orange', 'nship_3'], // orange moth debuts here
+    armoredTextures: ['eship_orange', 'nship_5'], // orange moth debuts here
     enemyTint: 0x00ffcc,      // teal/mint — nebula cross
     armoredTint: 0x00ddaa,
     bossTint: 0x44ffdd,
