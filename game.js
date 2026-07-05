@@ -2,7 +2,7 @@
 
 const W = 480;
 const H = 640;
-const VERSION = 'V0.85';
+const VERSION = 'V0.87';
 
 // ─── Shared state across scenes ───────────────────────────────────────────────
 const State = {
@@ -209,6 +209,7 @@ function spawnEnemy(scene, x, y, cfg) {
   e.body.allowGravity = false;
   e.body.setSize(info.body, info.body, true); // source px — ~same world hitbox across art
   e.isArmored = isArmored;
+  e.hasShot = false; // parting shot on death if this never flips true — see hitEnemy
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
   // fully-coloured art is never tinted
   const tint = info.tintable ? (cfg.tint || ENEMY_TINT[tex]) : null;
@@ -221,7 +222,7 @@ function spawnEnemy(scene, x, y, cfg) {
       // quick kill doesn't silently erase them before they ever fire a shot
       startAt: cfg.firstDelay || 300,
       loop: true,
-      callback: () => { if (e.active) cfg.pattern(scene, e); }
+      callback: () => { if (e.active) { cfg.pattern(scene, e); e.hasShot = true; } }
     });
   }
   if (cfg.move) cfg.move(scene, e);
@@ -579,6 +580,18 @@ const LEVELS = [
         s.queueSpawn(1400, () => spawnEnemy(s, W-130, -45, { texture:'ship_0015', hp:6, points:350, vy:34, pattern:P.aimedBig, patternDelay:1500 }));
       },
     ],
+    // Checkpoint fight partway through the level — previews the end boss's
+    // own opening patterns at lower HP, so they feel familiar when you meet it
+    midboss: {
+      atWave: 11,
+      spawn: s => spawnBoss(s, {
+        texture: 'nship_4', scale: 0.7, hitbox: 45, isMidBoss: true,
+        hp: 115, points: 1800,
+        patterns: [P.radial8, P.aimed3],
+        patternDelay: 1300,
+        move: 'roam'
+      })
+    },
     boss: s => spawnBoss(s, {
       texture: 'boss_space1', anim: 'boss_space1_anim', scale: 1.4, flip: true, hitbox: 60, // art faces up — flip to dive at player
       hp: 280, points: 5000,
@@ -782,6 +795,16 @@ const LEVELS = [
         s.queueSpawn(1300, () => spawnEnemy(s, W/2, -45, { texture:'ship_0015', hp:8, points:420, vy:34, pattern:P.aimedBig, patternDelay:1300 }));
       },
     ],
+    midboss: {
+      atWave: 12,
+      spawn: s => spawnBoss(s, {
+        texture: 'nship_14', scale: 0.7, hitbox: 45, isMidBoss: true,
+        hp: 200, points: 2600,
+        patterns: [P.radial8, P.aimed3],
+        patternDelay: 1150,
+        move: 'roam'
+      })
+    },
     boss: s => spawnBoss(s, {
       // 3-part moth carrier: body + left/right gun pods drawn on matching canvases
       texture: 'eboss_body', flip: false, scale: 1.6, hitbox: 60,
@@ -796,7 +819,7 @@ const LEVELS = [
   // LEVEL 3
   {
     title: 'VOID GATE',
-    bg: { dim: 0.35, layers: [
+    bg: { dim: 0.35, stars: true, layers: [
       { key:'bg_industy', scale:2, speed:32, loop:'clamp', depth:0 },
     ]},
     enemyTextures: ['ship_0017', 'ship_0018'],
@@ -973,6 +996,16 @@ const LEVELS = [
         });
       },
     ],
+    midboss: {
+      atWave: 11,
+      spawn: s => spawnBoss(s, {
+        texture: 'nship_20', scale: 0.7, hitbox: 45, isMidBoss: true,
+        hp: 360, points: 4500,
+        patterns: [P.radial12, P.doubleRadial],
+        patternDelay: 1000,
+        move: 'roam'
+      })
+    },
     boss: s => spawnBoss(s, {
       texture: 'boss_train', scale: 2, flip: false, hitbox: 60, // industrial bunker fits VOID GATE
       overlay: { key: 'boss_train_head', dy: -13, scale: 1 }, // turret head plugs the base's open hole
@@ -986,7 +1019,7 @@ const LEVELS = [
   // LEVEL 4 — CORONA BREACH (toxic green)
   {
     title: 'CORONA BREACH',
-    bg: { dim: 0.22, layers: [
+    bg: { dim: 0.22, stars: true, layers: [
       { key:'bg_seaice', anim:'bg_seaice_anim', scale:2, speed:32, loop:'clamp', depth:0 },
     ]},
     enemyTextures: ['ship_0019', 'ship_0020'],
@@ -1191,6 +1224,16 @@ const LEVELS = [
         s.queueSpawn(1700, () => spawnEnemy(s, W/2, -45, { texture:'ship_0015', hp:11, points:600, vy:34, pattern:P.aimedBig, patternDelay:1100 }));
       },
     ],
+    midboss: {
+      atWave: 12,
+      spawn: s => spawnBoss(s, {
+        texture: 'nship_9', scale: 0.7, hitbox: 45, isMidBoss: true,
+        hp: 520, points: 6500,
+        patterns: [P.dualSpiral, P.slowRing],
+        patternDelay: 850,
+        move: 'roam'
+      })
+    },
     boss: s => spawnBoss(s, {
       texture: 'boss_sub', anim: 'boss_sub_anim', scale: 0.75, flip: false, hitbox: 75,
       hp: 1300, points: 22000,
@@ -1204,7 +1247,7 @@ const LEVELS = [
   {
     title: 'APEX',
     // All three Nucleo layers share the same length and scroll in sync (per the pack's LEEME note)
-    bg: { dim: 0.3, layers: [
+    bg: { dim: 0.3, stars: true, layers: [
       { key:'bg_nucleo0', scale:2, speed:34, loop:'clamp', depth:0 },
       { key:'bg_nucleo1', scale:2, speed:34, loop:'clamp', depth:0.5 },
       { key:'bg_nucleo2', anim:'bg_nucleo2_anim', scale:2, speed:34, loop:'clamp', depth:1 },
@@ -1412,7 +1455,28 @@ const LEVELS = [
         });
       },
     ],
+    midboss: {
+      atWave: 12,
+      spawn: s => spawnBoss(s, {
+        texture: 'nship_16', scale: 0.7, hitbox: 45, isMidBoss: true,
+        hp: 720, points: 9000,
+        patterns: [P.doubleRadial, P.crossAim],
+        patternDelay: 750,
+        move: 'roam'
+      })
+    },
     boss: s => spawnBoss(s, {
+      // Composite final boss — animated body plus independently-animated
+      // nose cannon, dorsal turret, wingtip turrets and flank cannons
+      texture: 'boss_end', anim: 'boss_end_anim', scale: 1.3, flip: false, hitbox: 70,
+      overlays: [
+        { key: 'boss_end_head',    anim: 'boss_end_head_anim',    dx: 0,    dy: -55 },
+        { key: 'boss_end_turret',  anim: 'boss_end_turret_anim',  dx: 0,    dy: 18  },
+        { key: 'boss_end_wing',    anim: 'boss_end_wing_anim',    dx: -140, dy: -18 },
+        { key: 'boss_end_wing',    anim: 'boss_end_wing_anim',    dx: 140,  dy: -18 },
+        { key: 'boss_end_cannonL', anim: 'boss_end_cannonL_anim', dx: -88,  dy: -4  },
+        { key: 'boss_end_cannonR', anim: 'boss_end_cannonR_anim', dx: 88,   dy: -4  },
+      ],
       hp: 1800, points: 30000,
       patterns: [P.dualSpiral, P.slowRing, P.aimed7, P.curtain, P.doubleRadial, P.crossAim],
       patternDelay: 600,
@@ -1438,6 +1502,7 @@ function spawnBoss(scene, cfg) {
   boss.points  = cfg.points;
   boss.explodeSize = 'large';
   boss.isBoss  = true;
+  boss.isMidBoss = !!cfg.isMidBoss; // checkpoint fight — skips levelComplete on death
   boss.invulnerable = true; // immune during entry
   boss.body.allowGravity = false;
   // setSize params are in SOURCE (unscaled) pixels — Phaser multiplies by scaleX internally.
@@ -1448,7 +1513,10 @@ function spawnBoss(scene, cfg) {
   const overlayCfgs = cfg.overlays || (cfg.overlay ? [cfg.overlay] : []);
   if (overlayCfgs.length) {
     boss._parts = overlayCfgs.map(o => {
-      const ov = scene.add.image(boss.x, boss.y, o.key).setDepth(8).setScale(scale * (o.scale || 1));
+      // Sprite (not Image) when a part has its own animation to play
+      const ov = o.anim ? scene.add.sprite(boss.x, boss.y, o.key) : scene.add.image(boss.x, boss.y, o.key);
+      ov.setDepth(8).setScale(scale * (o.scale || 1));
+      if (o.anim) ov.play(o.anim);
       ov.setFlipY(boss.flipY);
       ov._dx = (o.dx || 0) * scale;
       ov._dy = (o.dy || 0) * scale;
@@ -1469,7 +1537,7 @@ function spawnBoss(scene, cfg) {
     boss.invulnerable = false;
     scene.bossActive = true;
     scene.showBossHUD(boss);
-    playMusic(scene, 'music_boss', 0.65);
+    if (!boss.isMidBoss) playMusic(scene, 'music_boss', 0.65); // save the boss theme for the real end boss
     startBossMove(scene, boss, cfg.move);
 
     let pi = 0;
@@ -1757,6 +1825,14 @@ class BootScene extends Phaser.Scene {
     this.load.spritesheet('boss_sub',    'assets/Backgrounds/Sea Ice Stage/Boss/SubMarine_strip4_loopit in ping pong mode.png', { frameWidth: 137, frameHeight: 321 });
     this.load.image('boss_train',        'assets/Backgrounds/Train Stage/Mid Boss/MidBoss_Base.png');
     this.load.image('boss_train_head',   'assets/Backgrounds/Train Stage/Mid Boss/MidBoss_Head.png');
+    // Endboss — composite final boss for APEX (level 5)
+    this.load.spritesheet('boss_end',        'assets/Endboss/Boss_Strip8.png',            { frameWidth: 357, frameHeight: 218 });
+    this.load.image('boss_end_dead',         'assets/Endboss/Boss_Destroyed.png');
+    this.load.spritesheet('boss_end_head',   'assets/Endboss/Head_Cannon_Strip4.png',     { frameWidth: 19, frameHeight: 66 });
+    this.load.spritesheet('boss_end_turret', 'assets/Endboss/Turret_Strip4.png',          { frameWidth: 27, frameHeight: 31 });
+    this.load.spritesheet('boss_end_wing',   'assets/Endboss/Wing_Turret_Strip3.png',     { frameWidth: 12, frameHeight: 20 });
+    this.load.spritesheet('boss_end_cannonL','assets/Endboss/Lil_Cannon1_L_Strip3.png',   { frameWidth: 9,  frameHeight: 22 });
+    this.load.spritesheet('boss_end_cannonR','assets/Endboss/Lil_Cannon1_R_Strip3.png',   { frameWidth: 9,  frameHeight: 22 });
     // Stage backgrounds — long vertical scrolls, some animated (strips)
     this.load.spritesheet('bg_space1',     'assets/Backgrounds/Space Stage 1/SpaceStage1_strip4.png',              { frameWidth: 400, frameHeight: 2098 });
     this.load.spritesheet('bg_space2_far', 'assets/Backgrounds/Space Stage 2/Layer0_Space_Stage_strip5.png',       { frameWidth: 400, frameHeight: 4110 });
@@ -2050,6 +2126,8 @@ class GameScene extends Phaser.Scene {
     this.gameOver     = false;
     this.bossActive    = false;
     this.bossTriggered = false;
+    this.midBossTriggered = false;
+    this.midBossPending = false; // true from banner-start until the midboss entity actually exists
     this.wavesEnabled  = false; // held until level banner finishes
     this.pendingSpawns = 0;     // incremented per queued spawn, decremented on fire
     this.invincible   = 0;
@@ -2241,7 +2319,7 @@ class GameScene extends Phaser.Scene {
     this.waveTimer += delta;
     // Short gap so clearing a wave quickly (easy on early levels) doesn't
     // leave the field empty for seconds before the next one shows up
-    if (this.wavesEnabled && !this.bossActive &&
+    if (this.wavesEnabled && !this.bossActive && !this.midBossPending &&
         this.pendingSpawns === 0 &&
         this.enemies.countActive(true) === 0 && this.waveTimer > 800) {
       this.spawnWave();
@@ -2429,7 +2507,10 @@ class GameScene extends Phaser.Scene {
     if (this.laserCooldown > 0) return;
     this.laserCooldown = 48;
     this.sound.play('sfx_shot', { volume: 0.18 });
-    const damage = 2 + Math.floor(State.powerLevel / 2); // 2, 2, 3, 3, 4
+    // Laser looked like a devastating continuous beam but dealt weak per-tick
+    // damage, especially once split across 2-3 parallel beams — kills lagged
+    // well behind the visual, making it feel gimmicky rather than powerful
+    const damage = 6 + State.powerLevel * 2; // 6, 8, 10, 12, 14 (was 2, 2, 3, 3, 4)
     this.ship.laser(this, this.player.x, this.player.y, damage);
   }
 
@@ -2468,7 +2549,20 @@ class GameScene extends Phaser.Scene {
       State.score += enemy.points || 100;
       const ex = enemy.x, ey = enemy.y, sz = enemy.explodeSize || 'small';
       const wasBoss = enemy.isBoss;
+      const wasMidBoss = enemy.isMidBoss;
       const isHeavy = wasBoss || enemy.isArmored; // read before destroy()
+      // Endboss gets a battle-damaged wreck pose held briefly before the
+      // explosion — read texture/scale now, before enemy.destroy() below
+      const wasEndBoss = wasBoss && !wasMidBoss && enemy.texture && enemy.texture.key === 'boss_end';
+      const endBossScale = enemy.scaleX;
+      // Parting shot: an enemy that never got a shot off (killed too fast to
+      // fire, or has no pattern at all) snaps off one aimed round at the
+      // player's current position the instant it dies — so camping a spot
+      // and one-shotting everything before it can react isn't fully free
+      if (enemy.hasShot === false && this.player && this.player.active) {
+        const dx = this.player.x - ex, dy = this.player.y - ey;
+        fireBullet(this, ex, ey, Phaser.Math.RadToDeg(Math.atan2(dy, dx)), 200);
+      }
       if (enemy._parts) enemy._parts.forEach(p => p.destroy());
       enemy.destroy();
       this.spawnExplosion(ex, ey, sz);
@@ -2482,7 +2576,20 @@ class GameScene extends Phaser.Scene {
       }
       if (wasBoss) {
         this.sound.play('sfx_bossdead', { volume: 0.9 });
-        this.time.delayedCall(600, () => this.levelComplete());
+        if (wasMidBoss) {
+          // Checkpoint fight, not the level's real end boss — clear the bar
+          // and let normal wave progression resume instead of ending the level.
+          // (Music never switched to the boss theme for a midboss, so no revert needed.)
+          this.bossActive = false;
+          this.bossHPBar.clear();
+          this.bossHPLabel.setText('');
+        } else {
+          if (wasEndBoss) {
+            const wreck = this.add.image(ex, ey, 'boss_end_dead').setScale(endBossScale).setDepth(14);
+            this.tweens.add({ targets: wreck, alpha: 0, delay: 350, duration: 250, onComplete: () => wreck.destroy() });
+          }
+          this.time.delayedCall(600, () => this.levelComplete());
+        }
       }
       // Chance to drop power-up
       if (Phaser.Math.Between(1, 100) <= (wasBoss ? 100 : isHeavy ? 40 : 15)) {
@@ -2639,6 +2746,20 @@ class GameScene extends Phaser.Scene {
 
     if (this.waveIdx < waves.length) {
       const idx = this.waveIdx++;
+      const mb = this.levelDef.midboss;
+      if (mb && idx === mb.atWave && !this.midBossTriggered) {
+        // Checkpoint fight — replaces this slot's normal spawn entirely so
+        // the midboss gets the screen to itself, same as the real boss does.
+        // midBossPending blocks normal wave auto-progression during the banner's
+        // ~1.8s delay, before the midboss entity exists to block it itself.
+        this.midBossTriggered = true;
+        this.midBossPending = true;
+        this.showBanner('⚠ MIDBOSS INCOMING', '#00eeff', () => {
+          this.midBossPending = false;
+          mb.spawn(this);
+        });
+        return;
+      }
       waves[idx].call(null, this);
       // Levels 1-3 were reading as too sparse/easy — reinforce every wave
       // after the first with a few extra chaff runners on top of the
@@ -2742,7 +2863,7 @@ class GameScene extends Phaser.Scene {
   }
 
   showBossHUD(boss) {
-    this.bossHPLabel.setText('BOSS');
+    this.bossHPLabel.setText(boss.isMidBoss ? 'MIDBOSS' : 'BOSS');
     this.drawBossHP(boss);
   }
 
@@ -3111,6 +3232,13 @@ function makeAnims(scene) {
     frames: scene.anims.generateFrameNumbers('boss_sub', { start: 0, end: 3 }),
     frameRate: 6, repeat: -1, yoyo: true
   });
+  // Endboss (level 5 final boss) — body idle + independently animated weapon parts
+  mk('boss_end_anim',        'boss_end',        7, 8);
+  mk('boss_end_head_anim',   'boss_end_head',   3, 10);
+  mk('boss_end_turret_anim', 'boss_end_turret', 3, 9);
+  mk('boss_end_wing_anim',   'boss_end_wing',   2, 9);
+  mk('boss_end_cannonL_anim','boss_end_cannonL',2, 9);
+  mk('boss_end_cannonR_anim','boss_end_cannonR',2, 9);
   // Spinning power-up gems
   mk('gem_power_anim', 'gem_power', 8, 10);
   mk('gem_life_anim',  'gem_life',  8, 10);
