@@ -2,7 +2,7 @@
 
 const W = 480;
 const H = 640;
-const VERSION = 'V0.8';
+const VERSION = 'V0.85';
 
 // ─── Shared state across scenes ───────────────────────────────────────────────
 const State = {
@@ -49,11 +49,17 @@ const SHIPS = [
     scale: 3,
     fireRate: 65,
     fire(scene, px, py, lvl) {
-      const spread = Math.min(lvl + 1, 4); // 2–5 bullets
-      const angles = [];
-      for (let i = 0; i <= spread; i++) angles.push(-spread * 8 + i * 16);
-      // damage 2 per bullet — spread means not all hit one target, so effective DPS is balanced
-      angles.forEach(ang => { const b = spawnPlayerBullet(scene, px, py, ang - 90, 650); if (b) b.damage = 2; });
+      // Fixed-width cone: more power adds DENSITY within the same ~40° spread
+      // rather than growing the arc — standing still shouldn't blanket the
+      // whole screen, so the player still has to line up with clusters
+      const count = Math.min(lvl + 2, 5); // 2 → 5 bullets
+      const totalArc = 40;
+      const step = count > 1 ? totalArc / (count - 1) : 0;
+      for (let i = 0; i < count; i++) {
+        const ang = -90 - totalArc / 2 + i * step;
+        const b = spawnPlayerBullet(scene, px, py, ang, 650);
+        if (b) b.damage = 2;
+      }
     },
     laser(scene, px, py, dmg) { spawnLaser(scene, px, py, 0, dmg); }
   },
@@ -98,9 +104,14 @@ const SHIPS = [
     scale: 0.5,
     fireRate: 170,   // was 140 — heavy shells hit hard, so the volley cadence pays for it
     fire(scene, px, py, lvl) {
-      const count = 3 + lvl * 2;
+      // Was 3→11 bullets across a widening arc that hit ~200° at max power
+      // (well past a forward cone) — trimmed to 3→7 bullets in a fixed 55°
+      // spread so power adds density, not screen-wide coverage
+      const count = 3 + lvl;
+      const totalArc = 55;
+      const step = count > 1 ? totalArc / (count - 1) : 0;
       for (let i = 0; i < count; i++) {
-        const ang = -90 - (count - 1) * 10 + i * 20;
+        const ang = -90 - totalArc / 2 + i * step;
         const b = spawnPlayerBullet(scene, px, py, ang, 500);
         b.setScale(3); // heavy shells — chunkier than the standard 2x
         b.damage = 3;  // heavy-class damage keeps base shot viable vs late bosses
@@ -341,6 +352,18 @@ const P = {
       const a = i * 20;
       if (Math.abs(Phaser.Math.Angle.ShortestBetween(a, pa)) > 32) fireBullet(s, e.x, e.y, a, 135);
     }
+  },
+  // ── Early-stage intensity patterns ──
+  shotgunAimed(s, e) {                              // aimed shot plus two flanking pellets — punchier than plain aimed1
+    if (!s.player || !s.player.active) return;
+    const base = Phaser.Math.RadToDeg(Math.atan2(s.player.y - e.y, s.player.x - e.x));
+    fireBullet(s, e.x, e.y, base, 190);
+    fireBullet(s, e.x, e.y, base - 16, 170);
+    fireBullet(s, e.x, e.y, base + 16, 170);
+  },
+  alternator(s, e) {                                // rapid single shots that alternate left/right — a zigzag dodge check
+    e._alt = !e._alt;
+    fireBullet(s, e.x, e.y, 90 + (e._alt ? -35 : 35), 185);
   }
 };
 
@@ -1812,7 +1835,7 @@ class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.pressZ, alpha: 0.25, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // Controls hint
-    this.add.text(W/2, H - 42, 'Z SHOOT   ·   X SLOW+LASER   ·   M MUTE   ·   F FULLSCREEN', {
+    this.add.text(W/2, H - 42, 'Z SHOOT   ·   X SLOW+LASER   ·   M MUTE   ·   F FULLSCREEN   ·   P PAUSE', {
       font: '10px monospace', fill: '#7089a3',
     }).setOrigin(0.5).setDepth(6);
 
@@ -1884,8 +1907,10 @@ class ShipSelectScene extends Phaser.Scene {
       { key: 'X',   label: 'SLOW + LASER' },
       { key: 'M',   label: 'MUTE' },
       { key: 'F',   label: 'FULLSCREEN' },
+      { key: 'P',   label: 'PAUSE' },
     ];
-    const boxW = 80, gap = 6;
+    // Box width shrinks a bit as more controls are added, so the row keeps fitting W
+    const boxW = controls.length >= 6 ? 72 : 80, gap = 6;
     const totalW = controls.length * boxW + (controls.length - 1) * gap;
     let cx = W / 2 - totalW / 2;
     const gy = this.add.graphics().setDepth(5);
@@ -2170,6 +2195,11 @@ class GameScene extends Phaser.Scene {
     });
     addFullscreenKey(this);
 
+    // Pause — freezes physics/tweens/timers (not the whole scene, so the
+    // keydown-P listener and our own update() loop stay alive to unpause)
+    this.isPaused = false;
+    this.input.keyboard.on('keydown-P', () => this.togglePause());
+
     // Collisions — power-ups use manual distance check in update (avoids physics callback corruption)
     const ba = (a, b) => a.active && b.active;
     this.physics.add.overlap(this.playerBullets, this.enemies,  this.hitEnemy,  ba, this);
@@ -2198,7 +2228,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.gameOver) return;
+    if (this.gameOver || this.isPaused) return;
     this.invincible = Math.max(0, this.invincible - delta);
 
     updateScrollLayers(this, delta);
@@ -2357,6 +2387,32 @@ class GameScene extends Phaser.Scene {
       this.drawLaserBeam();
     } else if (this.fireKey.isDown || this.touchShoot || (pad && pad.A)) {
       this.doShot();
+    }
+  }
+
+  // ── Pause ─────────────────────────────────────────────────────────────────
+
+  togglePause() {
+    if (this.gameOver) return;
+    this.isPaused = !this.isPaused;
+    if (this.isPaused) {
+      this.physics.world.pause();
+      this.tweens.pauseAll();
+      this.time.paused = true;
+      this.pauseOverlay = this.add.rectangle(0, 0, W, H, 0x000010, 0.6).setOrigin(0, 0).setDepth(50);
+      this.pauseText = this.add.text(W / 2, H / 2, 'PAUSED', {
+        font: 'bold 36px monospace', fill: '#ffffff', stroke: '#003355', strokeThickness: 6,
+      }).setOrigin(0.5).setDepth(51);
+      this.pauseHint = this.add.text(W / 2, H / 2 + 46, 'PRESS  P  TO  RESUME', {
+        font: '14px monospace', fill: '#88ccff',
+      }).setOrigin(0.5).setDepth(51);
+    } else {
+      this.physics.world.resume();
+      this.tweens.resumeAll();
+      this.time.paused = false;
+      if (this.pauseOverlay) { this.pauseOverlay.destroy(); this.pauseOverlay = null; }
+      if (this.pauseText)    { this.pauseText.destroy();    this.pauseText = null; }
+      if (this.pauseHint)    { this.pauseHint.destroy();    this.pauseHint = null; }
     }
   }
 
@@ -2538,13 +2594,56 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // Extra chaff runners layered on top of a wave's hand-authored spawns, for
+  // levels that were feeling too sparse. Uses the level's normal enemy
+  // texture pool so they fit the stage's visual theme.
+  spawnReinforcements(waveIdx) {
+    const extra = State.level === 1 ? 2 : 3;
+    const topPatterns = [P.aimed1, P.shotgunAimed, P.alternator];
+    for (let i = 0; i < extra; i++) {
+      this.queueSpawn(260 + i * 300, () => {
+        if (this.bossActive || !this.wavesEnabled) return;
+        spawnEnemy(this, Phaser.Math.Between(50, W - 50), -30, {
+          hp: 1 + Math.floor(State.level / 2),
+          points: 90,
+          vy: Phaser.Math.Between(58, 78),
+          pattern: Phaser.Utils.Array.GetRandom(topPatterns),
+          patternDelay: 1900
+        });
+      });
+    }
+    // Side runners — enter from off-screen left/right at a random height
+    // instead of the top, so camping dead-centre and shooting straight up
+    // stops being a safe strategy against everything on screen
+    const sideCount = State.level === 1 ? 1 : 2;
+    for (let i = 0; i < sideCount; i++) {
+      this.queueSpawn(500 + i * 650, () => {
+        if (this.bossActive || !this.wavesEnabled) return;
+        const fromLeft = Phaser.Math.Between(0, 1) === 0;
+        spawnEnemy(this, fromLeft ? -30 : W + 30, Phaser.Math.Between(70, 260), {
+          hp: 1 + Math.floor(State.level / 2),
+          points: 110,
+          vx: (fromLeft ? 1 : -1) * Phaser.Math.Between(110, 150),
+          vy: Phaser.Math.Between(25, 45),
+          pattern: Phaser.Utils.Array.GetRandom([P.shotgunAimed, P.alternator, P.aimed1]),
+          patternDelay: 1500
+        });
+      });
+    }
+  }
+
   spawnWave() {
     this.waveTimer = 0;
 
     const waves = this.levelDef.waves;
 
     if (this.waveIdx < waves.length) {
-      waves[this.waveIdx++].call(null, this);
+      const idx = this.waveIdx++;
+      waves[idx].call(null, this);
+      // Levels 1-3 were reading as too sparse/easy — reinforce every wave
+      // after the first with a few extra chaff runners on top of the
+      // hand-authored spawns, without having to rewrite every wave by hand
+      if (State.level <= 3 && idx >= 1) this.spawnReinforcements(idx);
     } else if (!this.bossTriggered) {
       this.bossTriggered = true;
       this.showBanner('⚠ BOSS INCOMING', '#f8f', () => {
