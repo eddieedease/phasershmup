@@ -2,7 +2,7 @@
 
 const W = 480;
 const H = 640;
-const VERSION = 'V0.7';
+const VERSION = 'V0.8';
 
 // ─── Shared state across scenes ───────────────────────────────────────────────
 const State = {
@@ -91,12 +91,12 @@ const SHIPS = [
     color: 0xff4466,
     speed: 180,
     focusSpeed: 80,
-    power: 0.95,
+    power: 0.85,
     texture: 'nship_5',   // big 128px heavy cruiser — fits the tank role
     centerFrame: 0,
     bank: false,
     scale: 0.5,
-    fireRate: 140,
+    fireRate: 170,   // was 140 — heavy shells hit hard, so the volley cadence pays for it
     fire(scene, px, py, lvl) {
       const count = 3 + lvl * 2;
       for (let i = 0; i < count; i++) {
@@ -163,9 +163,15 @@ const ENEMY_TINT = {
   'ship_0023': 0xff0044,   // crimson — apex boss
 };
 
-// The 128px "nship" art has ~4x the footprint of the 32px ships — normalize so
-// cfg.scale keeps meaning the same world size regardless of source art
-const NSHIP_FACTOR = 0.32;
+// Mixed-resolution art: normalize scale/hitbox per texture family so cfg.scale
+// keeps meaning the same world size regardless of source art.
+// factor: applied to cfg.scale · body: source-px hitbox ·
+// faceUp: art drawn nose-up (needs flipY as an enemy) · tintable: flat art that takes ENEMY_TINT
+function texInfo(tex) {
+  if (tex.startsWith('nship_')) return { factor: 0.32, body: 62, faceUp: true,  tintable: false };
+  if (tex.startsWith('eship_')) return { factor: 0.47, body: 40, faceUp: false, tintable: false };
+  return { factor: 1, body: 20, faceUp: true, tintable: true };
+}
 function isNship(tex) { return tex.startsWith('nship_'); }
 
 function spawnEnemy(scene, x, y, cfg) {
@@ -177,27 +183,32 @@ function spawnEnemy(scene, x, y, cfg) {
     tex = Phaser.Utils.Array.GetRandom(scene.levelArmoredTextures || ['ship_0015']);
     isArmored = true;
   }
-  const big = isNship(tex);
+  const info = texInfo(tex);
   const e = scene.enemies.create(x, y, tex);
   e.setDepth(7);
-  e.setFlipY(true);
-  e.setScale((cfg.scale || 1.5) * (big ? NSHIP_FACTOR : 1));
+  e.setFlipY(info.faceUp);
+  e.setScale((cfg.scale || 1.5) * info.factor);
   e.hp      = cfg.hp     || 3;
+  // Heavies should feel tanky: armored soak ×1.5, hand-placed big-art elites ×1.4.
+  // (Single tuning point — wave definitions keep their readable base hp values.)
+  if (isArmored) e.hp = Math.ceil(e.hp * 1.5);
+  else if (info.factor !== 1) e.hp = Math.ceil(e.hp * 1.4);
   e.points  = cfg.points || 100;
   e.explodeSize = cfg.explodeSize || 'small';
   e.body.allowGravity = false;
-  // source px — same ~30px world hitbox for both art scales
-  if (big) e.body.setSize(62, 62, true); else e.body.setSize(20, 20, true);
+  e.body.setSize(info.body, info.body, true); // source px — ~same world hitbox across art
   e.isArmored = isArmored;
   e.setVelocity(cfg.vx || 0, cfg.vy || 60);
-  // nships are fully-coloured art — never tint them
-  const tint = big ? null : (cfg.tint || ENEMY_TINT[tex]);
+  // fully-coloured art is never tinted
+  const tint = info.tintable ? (cfg.tint || ENEMY_TINT[tex]) : null;
   if (tint) e.setTint(tint);
 
   if (cfg.pattern) {
     scene.time.addEvent({
       delay: cfg.patternDelay || 1200,
-      startAt: cfg.firstDelay || 600,
+      // Fire soon after spawning — a hair after they're on-screen — so a
+      // quick kill doesn't silently erase them before they ever fire a shot
+      startAt: cfg.firstDelay || 300,
       loop: true,
       callback: () => { if (e.active) cfg.pattern(scene, e); }
     });
@@ -562,8 +573,7 @@ const LEVELS = [
       { key:'bg_space2_ground', scale:1.2, speed:30, loop:'clamp', depth:1 },
     ]},
     enemyTextures: ['ship_0016', 'ship_0013'],
-    armoredTextures: ['nship_3', 'nship_4'],
-    bossTexture: 'nship_20',   // bulky capital ship reads as a proper boss
+    armoredTextures: ['eship_orange', 'nship_3'], // orange moth debuts here
     enemyTint: 0x00ffcc,      // teal/mint — nebula cross
     armoredTint: 0x00ddaa,
     bossTint: 0x44ffdd,
@@ -750,7 +760,9 @@ const LEVELS = [
       },
     ],
     boss: s => spawnBoss(s, {
-      scale: 1.15, hitbox: 60, // bigger so the capital ship feels boss-sized
+      // 3-part moth carrier: body + left/right gun pods drawn on matching canvases
+      texture: 'eboss_body', flip: false, scale: 1.6, hitbox: 60,
+      overlays: [{ key: 'eboss_lgun' }, { key: 'eboss_rgun' }],
       hp: 500, points: 9000,
       patterns: [P.radial8, P.aimed3, P.spiral],
       patternDelay: 1000,
@@ -955,8 +967,7 @@ const LEVELS = [
       { key:'bg_seaice', anim:'bg_seaice_anim', scale:2, speed:32, loop:'clamp', depth:0 },
     ]},
     enemyTextures: ['ship_0019', 'ship_0020'],
-    armoredTextures: ['nship_14', 'nship_15'],
-    bossTexture: 'nship_20',
+    armoredTextures: ['eship_yellow', 'nship_15'], // yellow moth joins the ice stage
     enemyTint: 0x44ff00,      // lime green — corona breach
     armoredTint: 0x22cc00,
     bossTint: 0x88ff44,
@@ -1409,14 +1420,17 @@ function spawnBoss(scene, cfg) {
   // setSize params are in SOURCE (unscaled) pixels — Phaser multiplies by scaleX internally.
   const hb = (cfg.hitbox || 50) / scale;
   boss.body.setSize(hb, hb, true);
-  // Optional overlay part that tracks the boss — used to fill multi-part boss art
-  // (e.g. the train bunker's turret head that plugs the base's open hole).
-  if (cfg.overlay) {
-    const ov = scene.add.image(boss.x, boss.y, cfg.overlay.key).setDepth(8).setScale(scale * (cfg.overlay.scale || 1));
-    ov.setFlipY(boss.flipY);
-    boss._overlay   = ov;
-    boss._overlayDx = (cfg.overlay.dx || 0) * scale;
-    boss._overlayDy = (cfg.overlay.dy || 0) * scale;
+  // Optional overlay parts that track the boss — for multi-part boss kits
+  // (train bunker's turret head, the moth carrier's left/right gun pods, …)
+  const overlayCfgs = cfg.overlays || (cfg.overlay ? [cfg.overlay] : []);
+  if (overlayCfgs.length) {
+    boss._parts = overlayCfgs.map(o => {
+      const ov = scene.add.image(boss.x, boss.y, o.key).setDepth(8).setScale(scale * (o.scale || 1));
+      ov.setFlipY(boss.flipY);
+      ov._dx = (o.dx || 0) * scale;
+      ov._dy = (o.dy || 0) * scale;
+      return ov;
+    });
   }
 
   // Size-aware entry: start fully above the screen, end with the boss ~35% of
@@ -1547,27 +1561,46 @@ function updateScrollLayers(scene, delta) {
 // ─── Power-up types ───────────────────────────────────────────────────────────
 const POWERUP_TYPES       = ['power', 'power', 'power', 'power', 'bomb'];
 const POWERUP_TYPES_HEAVY = ['power', 'power', 'power', 'bomb',  'power', 'life'];
-// Per-level drop budget — prevents feast-or-famine RNG
-const PU_BUDGET = { power: 8, bomb: 3, life: 1 };
+// Per-level drop budget — early stages are lean (no bombs at all in stage 1),
+// later stages keep the full economy that the harder waves are tuned around
+function puBudget(level) {
+  if (level === 1) return { power: 4, bomb: 0, life: 0 };
+  if (level === 2) return { power: 6, bomb: 2, life: 1 };
+  return { power: 8, bomb: 3, life: 1 };
+}
 
-function spawnPowerup(scene, x, heavy = false) {
+// Drops appear where the enemy died and tumble down from there
+function spawnPowerup(scene, x, y, heavy = false) {
+  const d = scene.puDropped;
+  const budget = puBudget(State.level);
+  // Pace drops across the whole level instead of the kill-rush at the start:
+  // ration the total budget by how far into the level's waves we've gotten,
+  // so a fast early clear can't blow through the whole budget in 10 seconds.
+  if (d) {
+    const totalBudget = budget.power + budget.bomb + budget.life;
+    const totalDropped = (d.power || 0) + (d.bomb || 0) + (d.life || 0);
+    const totalWaves = (scene.levelDef && scene.levelDef.waves.length) || 1;
+    const progress = Math.min(1, (scene.waveIdx || 0) / totalWaves);
+    const allowedSoFar = Math.ceil(totalBudget * progress);
+    if (totalDropped >= allowedSoFar) return null; // ahead of schedule — wait for more level progress
+  }
+
   const pool = heavy ? POWERUP_TYPES_HEAVY : POWERUP_TYPES;
   let type = Phaser.Utils.Array.GetRandom(pool);
   // Enforce budget: if this type is capped, try alternatives in priority order
-  const d = scene.puDropped;
   if (d) {
     const order = ['power', 'bomb', 'life'];
-    if ((d[type] || 0) >= PU_BUDGET[type]) {
-      type = order.find(t => (d[t] || 0) < PU_BUDGET[t]);
+    if ((d[type] || 0) >= budget[type]) {
+      type = order.find(t => (d[t] || 0) < budget[t]);
       if (!type) return null; // all budgets exhausted — no drop
     }
     d[type] = (d[type] || 0) + 1;
   }
   // Spinning gems: yellow = power, pink = life, cyan = bomb
   const key = type === 'life' ? 'gem_life' : type === 'bomb' ? 'gem_bomb' : 'gem_power';
-  // Drift in from the top at a random x, slow fall
   const spawnX = x !== undefined ? Phaser.Math.Clamp(x, 24, W - 24) : Phaser.Math.Between(24, W - 24);
-  const pu = scene.powerups.create(spawnX, -16, key);
+  const spawnY = y !== undefined ? Math.max(y, -16) : -16;
+  const pu = scene.powerups.create(spawnX, spawnY, key);
   pu.setDepth(9).setScale(2);
   pu.play(key + '_anim');
   pu.puType = type;
@@ -1576,6 +1609,19 @@ function spawnPowerup(scene, x, heavy = false) {
   // Gentle bob layered on top of the slow drift
   scene.tweens.add({ targets: pu, x: spawnX + Phaser.Math.Between(-12, 12), duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   return pu;
+}
+
+// ─── Gamepad menu navigation ─────────────────────────────────────────────────
+// Edge-triggered with hold-repeat: fires once when a button/direction is first
+// pressed, then (optionally) repeats while held. Much less twitchy than a plain
+// cooldown, and a button still held from the previous screen never auto-fires.
+function padNavStep(store, key, isDown, delta, holdDelay = 450, repeatRate = 0) {
+  const s = store[key] || (store[key] = { t: -1 });
+  if (!isDown) { s.t = -1; return false; }
+  if (s.t < 0) { s.t = 0; return true; } // rising edge
+  s.t += delta;
+  if (repeatRate > 0 && s.t >= holdDelay) { s.t = holdDelay - repeatRate; return true; }
+  return false;
 }
 
 // ─── Menu UI helpers ──────────────────────────────────────────────────────────
@@ -1593,21 +1639,26 @@ function updateMenuBackground(scene, delta) {
   if (scene.menuStars) scene.menuStars.tilePositionY -= 1.2;
 }
 
-// Layered glowing "EAser" wordmark inside a container so it can be pulsed/scaled.
+// Layered glowing "Easing" wordmark inside a container so it can be pulsed/scaled.
+// Split point: gold "E" + white "asing", joined at the container origin.
 function drawLogo(scene, cx, cy) {
   const cont = scene.add.container(cx, cy).setDepth(6);
   const f = 'bold 76px monospace';
   const parts = [
     // drop shadow
-    scene.add.text(3, 5, 'EA',  { font:f, fill:'#000000' }).setOrigin(1, 0.5).setAlpha(0.5),
-    scene.add.text(3, 5, 'ser', { font:f, fill:'#000000' }).setOrigin(0, 0.5).setAlpha(0.5),
+    scene.add.text(3, 5, 'E',     { font:f, fill:'#000000' }).setOrigin(1, 0.5).setAlpha(0.5),
+    scene.add.text(3, 5, 'asing', { font:f, fill:'#000000' }).setOrigin(0, 0.5).setAlpha(0.5),
     // cyan bloom
-    scene.add.text(0, 0, 'EA',  { font:f, fill:'#ffcc00', stroke:'#00eeff', strokeThickness:11 }).setOrigin(1, 0.5).setAlpha(0.16),
-    scene.add.text(0, 0, 'ser', { font:f, fill:'#ffffff', stroke:'#00eeff', strokeThickness:11 }).setOrigin(0, 0.5).setAlpha(0.16),
+    scene.add.text(0, 0, 'E',     { font:f, fill:'#ffcc00', stroke:'#00eeff', strokeThickness:11 }).setOrigin(1, 0.5).setAlpha(0.16),
+    scene.add.text(0, 0, 'asing', { font:f, fill:'#ffffff', stroke:'#00eeff', strokeThickness:11 }).setOrigin(0, 0.5).setAlpha(0.16),
     // main fill
-    scene.add.text(0, 0, 'EA',  { font:f, fill:'#ffd21e', stroke:'#7a5200', strokeThickness:5 }).setOrigin(1, 0.5),
-    scene.add.text(0, 0, 'ser', { font:f, fill:'#ffffff', stroke:'#1a4a63', strokeThickness:4 }).setOrigin(0, 0.5),
+    scene.add.text(0, 0, 'E',     { font:f, fill:'#ffd21e', stroke:'#7a5200', strokeThickness:5 }).setOrigin(1, 0.5),
+    scene.add.text(0, 0, 'asing', { font:f, fill:'#ffffff', stroke:'#1a4a63', strokeThickness:4 }).setOrigin(0, 0.5),
   ];
+  // Re-centre: "E" hangs left of the join, "asing" extends right — shift so the
+  // whole wordmark is balanced around the container origin
+  const dx = (parts[4].width - parts[5].width) / 2;
+  parts.forEach(p => p.x += dx);
   cont.add(parts);
   return cont;
 }
@@ -1657,6 +1708,12 @@ class BootScene extends Phaser.Scene {
     [1,2,3,4,5,6,9,10,12,14,15,16,17,19,20,21,22,23,24,25].forEach(n =>
       this.load.image(`nship_${n}`, `assets/Ships/new/ship-1 (${n}).png`)
     );
+    // Moth-style enemy ships + 3-part composite boss kit (guns overlay the body)
+    this.load.image('eship_orange', 'assets/Ships/enemy/0Orange.png');
+    this.load.image('eship_yellow', 'assets/Ships/enemy/0Yellow.png');
+    this.load.image('eboss_body',   'assets/Ships/enemy/Body.png');
+    this.load.image('eboss_lgun',   'assets/Ships/enemy/LGun.png');
+    this.load.image('eboss_rgun',   'assets/Ships/enemy/RGun.png');
     // Bullets
     this.load.spritesheet('pbullet0', 'assets/Bullet Pack/Player Bullets/New_P1Bullet_Cian_lvl0_strip2.png', { frameWidth: 2,  frameHeight: 21 });
     this.load.spritesheet('pbullet1', 'assets/Bullet Pack/Player Bullets/New_P1Bullet_Cian_lvl1_strip2.png', { frameWidth: 4,  frameHeight: 21 });
@@ -1944,13 +2001,15 @@ class ShipSelectScene extends Phaser.Scene {
     if (this.input.gamepad.total === 0) return;
     const pad = this.input.gamepad.getPad(0);
     if (!pad) return;
-    // Debounce gamepad input
-    if (!this._padCool) this._padCool = 0;
-    this._padCool -= 16;
-    if (this._padCool > 0) return;
-    if (pad.left  || pad.leftStick.x < -0.4) { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); this._padCool = 250; }
-    if (pad.right || pad.leftStick.x >  0.4) { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); this._padCool = 250; }
-    if (pad.A || pad.start) {
+    if (!this._nav) this._nav = {};
+    const left    = padNavStep(this._nav, 'left',  pad.left  || pad.leftStick.x < -0.5, delta, 450, 250);
+    const right   = padNavStep(this._nav, 'right', pad.right || pad.leftStick.x >  0.5, delta, 450, 250);
+    const confirm = padNavStep(this._nav, 'A',     pad.A || pad.start, delta); // edge only, no repeat
+    // First frame just records buttons already held (e.g. A from the title screen)
+    if (!this._navSeeded) { this._navSeeded = true; return; }
+    if (left)  { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); }
+    if (right) { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); }
+    if (confirm) {
       State.ship = this.sel; State.score = 0; State.level = 1;
       State.lives = 3; State.powerLevel = 0; State.subPower = 0;
       this.scene.start('Game');
@@ -2037,6 +2096,10 @@ class GameScene extends Phaser.Scene {
 
     this.hitbox = this.add.image(W/2, H - 80, 'hitbox').setDepth(11).setAlpha(0);
     this.laserBeam = this.add.graphics().setDepth(9);
+    // Thruster flame — sits behind the ship, grows when pushing forward
+    this.thruster = this.add.image(W/2, H - 80, 'flame').setOrigin(0.5, 0)
+      .setDepth(9.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9);
+    this._thrustLen = 1;
 
     // Input
     this.cursors  = this.input.keyboard.createCursorKeys();
@@ -2051,8 +2114,7 @@ class GameScene extends Phaser.Scene {
     // Touch controls — only on mobile
     this.touchShoot = false;
     this.touchFocus = false;
-    this.touchMoveX = null;
-    this.touchMoveY = null;
+    this.joyPointer = null; // set up properly inside the isMobile block below
     // coarse pointer = touchscreen; fine pointer = mouse (desktop)
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
     if (isMobile) {
@@ -2072,6 +2134,35 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0x0055ff, 0.4); g.fillRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
       g.lineStyle(2, 0x4499ff, 0.9); g.strokeRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
       this.add.text(laserX, laserY, 'LASER', { font: 'bold 14px monospace', fill: '#88ccff' }).setOrigin(0.5).setDepth(29);
+
+      // Fixed virtual joystick (bottom-left) — analog stick anchored to one spot,
+      // instead of the ship chasing the raw finger position anywhere on screen
+      const joyR = 54, joyKnobR = 22;
+      this.joyRadius = joyR;
+      this.joyCenter = { x: joyR + pad + 6, y: H - joyR - pad - 6 };
+      this.joyPointer = null;
+      this.touchDirX = 0;
+      this.touchDirY = 0;
+      g.fillStyle(0x0a1a33, 0.45); g.fillCircle(this.joyCenter.x, this.joyCenter.y, joyR);
+      g.lineStyle(2, 0x4499ff, 0.8); g.strokeCircle(this.joyCenter.x, this.joyCenter.y, joyR);
+      this.joyKnob = this.add.circle(this.joyCenter.x, this.joyCenter.y, joyKnobR, 0x66bbff, 0.55)
+        .setDepth(29).setStrokeStyle(2, 0xaaddff, 0.9);
+
+      const joyCatchR = joyR * 1.4; // slightly generous so a stray tap near the edge still engages
+      this.input.on('pointerdown', p => {
+        if (this.joyPointer === null && Phaser.Math.Distance.Between(p.x, p.y, this.joyCenter.x, this.joyCenter.y) <= joyCatchR) {
+          this.joyPointer = p;
+        }
+      });
+      const releaseJoy = p => {
+        if (p === this.joyPointer) {
+          this.joyPointer = null;
+          this.touchDirX = 0; this.touchDirY = 0;
+          this.joyKnob.setPosition(this.joyCenter.x, this.joyCenter.y);
+        }
+      };
+      this.input.on('pointerup', releaseJoy);
+      this.input.on('pointerupoutside', releaseJoy);
     }
     this.input.keyboard.on('keydown-M', () => {
       this.sound.mute = !this.sound.mute;
@@ -2118,9 +2209,11 @@ class GameScene extends Phaser.Scene {
     // Wave progression — guarded by wavesEnabled so the level banner
     // can't race with the first spawnWave call
     this.waveTimer += delta;
+    // Short gap so clearing a wave quickly (easy on early levels) doesn't
+    // leave the field empty for seconds before the next one shows up
     if (this.wavesEnabled && !this.bossActive &&
         this.pendingSpawns === 0 &&
-        this.enemies.countActive(true) === 0 && this.waveTimer > 1500) {
+        this.enemies.countActive(true) === 0 && this.waveTimer > 800) {
       this.spawnWave();
     }
 
@@ -2148,9 +2241,9 @@ class GameScene extends Phaser.Scene {
       if (b.y > H+20 || b.x < -40 || b.x > W+40) { b.setActive(false).setVisible(false); b.anims.stop(); }
     }
     for (const e of this.enemies.getChildren()) {
-      if (e.y > H+80 || e.x < -100 || e.x > W+100) { if (e._overlay) e._overlay.destroy(); e.destroy(); continue; }
-      // Keep any multi-part overlay glued to its boss
-      if (e._overlay) e._overlay.setPosition(e.x + e._overlayDx, e.y + e._overlayDy).setRotation(e.rotation);
+      if (e.y > H+80 || e.x < -100 || e.x > W+100) { if (e._parts) e._parts.forEach(p => p.destroy()); e.destroy(); continue; }
+      // Keep any multi-part overlays glued to their boss
+      if (e._parts) e._parts.forEach(p => p.setPosition(e.x + p._dx, e.y + p._dy).setRotation(e.rotation));
       // Rotate nose toward player (sprite faces down at rotation=0 due to flipY)
       if (!e.isBoss && this.player && this.player.active) {
         const targetRot = Phaser.Math.Angle.Between(e.x, e.y, this.player.x, this.player.y) - Math.PI / 2;
@@ -2175,15 +2268,30 @@ class GameScene extends Phaser.Scene {
     // ── Touch pointer scan ────────────────────────────────────────────────
     this.touchShoot = false;
     this.touchFocus = false;
-    this.touchMoveX = null;
-    this.touchMoveY = null;
     if (this.shootZone) {
       const ptrs = [this.input.pointer1, this.input.pointer2, this.input.pointer3];
       for (const p of ptrs) {
         if (!p.isDown) continue;
         if (this.shootZone.contains(p.x, p.y)) { this.touchShoot = true; }
         else if (this.laserZone.contains(p.x, p.y)) { this.touchFocus = true; }
-        else { this.touchMoveX = p.x; this.touchMoveY = p.y; }
+      }
+      // Fixed virtual joystick — direction + magnitude from the drag offset
+      // relative to its anchored centre, not the finger's absolute position
+      if (this.joyPointer && this.joyPointer.isDown) {
+        const dx = this.joyPointer.x - this.joyCenter.x;
+        const dy = this.joyPointer.y - this.joyCenter.y;
+        const dist = Math.hypot(dx, dy);
+        const clamped = Math.min(dist, this.joyRadius);
+        const ang = Math.atan2(dy, dx);
+        this.joyKnob.setPosition(this.joyCenter.x + Math.cos(ang) * clamped, this.joyCenter.y + Math.sin(ang) * clamped);
+        const dead = 10;
+        if (dist > dead) {
+          const mag = Math.min(1, (dist - dead) / (this.joyRadius - dead));
+          this.touchDirX = Math.cos(ang) * mag;
+          this.touchDirY = Math.sin(ang) * mag;
+        } else {
+          this.touchDirX = 0; this.touchDirY = 0;
+        }
       }
     }
 
@@ -2193,7 +2301,8 @@ class GameScene extends Phaser.Scene {
     const pad = this.gamepad && this.gamepad.connected ? this.gamepad : null;
 
     // ── Movement ──────────────────────────────────────────────────────────
-    const focused = this.focusKey.isDown || this.touchFocus || (pad && pad.R2 > 0.3);
+    // Anything that fires the laser also slows you down — including pad B
+    const focused = this.focusKey.isDown || this.touchFocus || (pad && (pad.R2 > 0.3 || pad.B));
     const spd = focused ? this.ship.focusSpeed : this.ship.speed;
 
     let mvx = (this.cursors.left.isDown ? -1 : this.cursors.right.isDown ? 1 : 0);
@@ -2207,10 +2316,9 @@ class GameScene extends Phaser.Scene {
       else if (pad.up) mvy = -1; else if (pad.down) mvy = 1;
     }
 
-    if (this.touchMoveX !== null) {
-      const dx = this.touchMoveX - this.player.x, dy = this.touchMoveY - this.player.y;
-      if (Math.abs(dx) > 6) mvx = Math.sign(dx);
-      if (Math.abs(dy) > 6) mvy = Math.sign(dy);
+    if (this.joyPointer && this.joyPointer.isDown) {
+      mvx = this.touchDirX;
+      mvy = this.touchDirY;
     }
 
     this.player.setVelocity(mvx * spd, mvy * spd);
@@ -2229,14 +2337,24 @@ class GameScene extends Phaser.Scene {
     this.hitbox.setPosition(this.player.x, this.player.y).setAlpha(focused ? 1 : 0);
     this.modeTxt.setText(focused ? 'FOCUS' : 'AUTO');
 
+    // Thruster: long when pushing forward, short when braking, flickering always
+    const thrustTarget = mvy < -0.3 ? 1.8 : mvy > 0.3 ? 0.5 : 1.0;
+    this._thrustLen = Phaser.Math.Linear(this._thrustLen, thrustTarget, 0.18);
+    this.thruster
+      .setPosition(this.player.x, this.player.y + this.player.displayHeight / 2 - 4)
+      .setScale(1.1, this._thrustLen * (0.85 + Math.random() * 0.3))
+      .setAlpha((focused ? 0.55 : 0.95) * this.player.alpha);
+
     // ── Shooting ──────────────────────────────────────────────────────────
     this.shotCooldown  = Math.max(0, this.shotCooldown - delta);
     this.laserCooldown = Math.max(0, this.laserCooldown - delta);
     this.laserBeam.clear();
 
-    // X (focus key) alone fires laser — no need to hold Z simultaneously
-    if (focused || this.touchFocus || (pad && pad.B)) {
+    // X (focus key) alone fires laser — no need to hold Z simultaneously.
+    // focused already covers keyboard X, touch, R2 and pad B.
+    if (focused) {
       this.doLaser();
+      this.drawLaserBeam();
     } else if (this.fireKey.isDown || this.touchShoot || (pad && pad.A)) {
       this.doShot();
     }
@@ -2255,23 +2373,31 @@ class GameScene extends Phaser.Scene {
     if (this.laserCooldown > 0) return;
     this.laserCooldown = 48;
     this.sound.play('sfx_shot', { volume: 0.18 });
+    const damage = 2 + Math.floor(State.powerLevel / 2); // 2, 2, 3, 3, 4
+    this.ship.laser(this, this.player.x, this.player.y, damage);
+  }
 
+  // Beam visual, drawn EVERY frame while the laser is held (damage still ticks
+  // on the 48ms cooldown) — steady and bright instead of the old 1-in-3-frames flicker
+  drawLaserBeam() {
     const px = this.player.x, py = this.player.y;
     const pl = State.powerLevel; // 0-4
-
-    // Beam grows in 5 phases with power level
-    const coreW  = 4  + pl * 3;          // 4 → 16 px
-    const glowW  = 12 + pl * 6;          // 12 → 36 px
-    const coreCol = pl >= 3 ? 0xff4400 : pl >= 2 ? 0xff8800 : 0xffdd00;
-    const glowCol = pl >= 3 ? 0xff0000 : pl >= 2 ? 0xff4400 : 0xff8800;
-    const damage  = 2 + Math.floor(pl / 2); // 2, 2, 3, 3, 4
-
-    this.laserBeam.lineStyle(coreW, coreCol, 1);
+    const coreW  = 5  + pl * 3;          // 5 → 17 px
+    const glowW  = 14 + pl * 7;          // 14 → 42 px
+    const glowCol = pl >= 3 ? 0xff2200 : pl >= 2 ? 0xff7700 : 0xffbb00;
+    // outer glow → coloured mid → white-hot core
+    this.laserBeam.lineStyle(glowW, glowCol, 0.35);
     this.laserBeam.beginPath(); this.laserBeam.moveTo(px, py - 12); this.laserBeam.lineTo(px, 0); this.laserBeam.strokePath();
-    this.laserBeam.lineStyle(glowW, glowCol, 0.3);
+    this.laserBeam.lineStyle(coreW, glowCol, 0.9);
     this.laserBeam.beginPath(); this.laserBeam.moveTo(px, py - 12); this.laserBeam.lineTo(px, 0); this.laserBeam.strokePath();
-
-    this.ship.laser(this, px, py, damage);
+    this.laserBeam.lineStyle(Math.max(2, coreW - 3), 0xffffff, 1);
+    this.laserBeam.beginPath(); this.laserBeam.moveTo(px, py - 12); this.laserBeam.lineTo(px, 0); this.laserBeam.strokePath();
+    // muzzle flare at the ship's nose, gently pulsing
+    const flare = 6 + pl * 2 + Math.sin(this.time.now / 40) * 2;
+    this.laserBeam.fillStyle(0xffffff, 0.9);
+    this.laserBeam.fillCircle(px, py - 14, flare * 0.5);
+    this.laserBeam.fillStyle(glowCol, 0.4);
+    this.laserBeam.fillCircle(px, py - 14, flare);
   }
 
   // ── Collisions ────────────────────────────────────────────────────────────
@@ -2287,16 +2413,24 @@ class GameScene extends Phaser.Scene {
       const ex = enemy.x, ey = enemy.y, sz = enemy.explodeSize || 'small';
       const wasBoss = enemy.isBoss;
       const isHeavy = wasBoss || enemy.isArmored; // read before destroy()
-      if (enemy._overlay) enemy._overlay.destroy();
+      if (enemy._parts) enemy._parts.forEach(p => p.destroy());
       enemy.destroy();
       this.spawnExplosion(ex, ey, sz);
+      // Kill pop — weak enemies die on the first hit and never reach the
+      // survive-branch hit sound, so give the kill itself audio feedback
+      // (same throttle as the hit thud, pitched brighter)
+      const killNow = this.time.now;
+      if (!this.lastEnemyHitSoundAt || killNow - this.lastEnemyHitSoundAt > 70) {
+        this.lastEnemyHitSoundAt = killNow;
+        this.sound.play('sfx_enemyhit', { volume: 0.65, rate: 1.15 });
+      }
       if (wasBoss) {
         this.sound.play('sfx_bossdead', { volume: 0.9 });
         this.time.delayedCall(600, () => this.levelComplete());
       }
       // Chance to drop power-up
       if (Phaser.Math.Between(1, 100) <= (wasBoss ? 100 : isHeavy ? 40 : 15)) {
-        spawnPowerup(this, ex, isHeavy);
+        spawnPowerup(this, ex, ey, isHeavy);
       }
     } else {
       // Throttle: rapid-fire weapons (laser) can trigger many overlaps per frame,
@@ -2356,18 +2490,22 @@ class GameScene extends Phaser.Scene {
 
     if (type === 'power') {
       this.sound.play('sfx_powerup', { volume: 0.6 });
-      if (State.powerLevel < 4) {
+      // Per-stage power ceiling: stage 1 caps at level 1, stage 2 at level 3,
+      // from stage 3 the full ladder is open — keeps early stages honest
+      const cap = State.level === 1 ? 1 : State.level === 2 ? 3 : 4;
+      if (State.powerLevel < cap) {
         State.subPower++;
         if (State.subPower >= 4) {
           State.subPower = 0;
-          State.powerLevel = Math.min(State.powerLevel + 1, 4);
+          State.powerLevel = Math.min(State.powerLevel + 1, cap);
           this.flashText(px, py - 20, 'POWER UP!', '#ff0');
           this.cameras.main.flash(120, 255, 220, 0, false, null, null, 0.35);
         } else {
           this.flashText(px, py - 20, `PWR ${State.subPower}/4`, '#ffaa00');
         }
       } else {
-        this.flashText(px, py - 20, 'MAX POWER', '#ff4400');
+        State.score += 500; // capped for this stage — convert to points
+        this.flashText(px, py - 20, 'MAX +500', '#ff4400');
       }
     } else if (type === 'life') {
       this.lives = Math.min(this.lives + 1, 5);
@@ -2423,7 +2561,12 @@ class GameScene extends Phaser.Scene {
 
     const isVictory = State.level >= LEVELS.length;
 
-    // Show STAGE CLEAR / VICTORY banner, then count down 5→0 before moving on
+    // A quick celebratory "NICE!" punch-in first, then the usual
+    // STAGE CLEAR / VICTORY banner, then count down 5→0 before moving on
+    this.showNiceBanner(() => this.showStageClearBanner(isVictory));
+  }
+
+  showStageClearBanner(isVictory) {
     this.showBanner(isVictory ? 'VICTORY!' : 'STAGE CLEAR!', isVictory ? '#ff0' : '#0f0', () => {
       let count = 5;
       const cd = this.add.text(W / 2, H / 2 + 30, `NEXT STAGE IN  ${count}`, {
@@ -2517,6 +2660,46 @@ class GameScene extends Phaser.Scene {
 
   updateMuteLabel() {
     if (this.muteTxt) this.muteTxt.setText(this.sound.mute ? '🔇 M' : '');
+  }
+
+  // Quick celebratory punch-in shown right as a stage is cleared, before the
+  // STAGE CLEAR / VICTORY banner — a small extra beat of reward for the kill
+  showNiceBanner(cb) {
+    const cx = W / 2, cy = H / 2 - 70;
+    this.sound.play('sfx_powerup', { volume: 0.7, rate: 1.15 });
+    this.cameras.main.flash(160, 255, 255, 200, false, null, null, 0.25);
+
+    // Sparkle burst radiating out from the text
+    for (let i = 0; i < 14; i++) {
+      const ang = (Math.PI * 2 / 14) * i;
+      const p = this.add.image(cx, cy, 'particle').setDepth(30)
+        .setTint(Phaser.Utils.Array.GetRandom([0x00ff88, 0xffff00, 0xff66ff, 0xffffff])).setScale(1.3);
+      this.tweens.add({
+        targets: p, x: cx + Math.cos(ang) * 100, y: cy + Math.sin(ang) * 100,
+        alpha: 0, scale: 0, duration: 650, ease: 'Cubic.easeOut', onComplete: () => p.destroy()
+      });
+    }
+
+    const t = this.add.text(cx, cy, 'NICE!', {
+      font: 'bold 48px monospace', fill: '#00ff88', stroke: '#003322', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(31).setScale(0.2).setAlpha(0);
+
+    this.tweens.add({
+      targets: t, scale: 1, alpha: 1, duration: 260, ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: t, scale: 1.12, duration: 220, yoyo: true, ease: 'Sine.easeInOut',
+          onComplete: () => {
+            this.time.delayedCall(300, () => {
+              this.tweens.add({
+                targets: t, alpha: 0, y: cy - 20, duration: 250,
+                onComplete: () => { t.destroy(); if (cb) cb(); }
+              });
+            });
+          }
+        });
+      }
+    });
   }
 
   showBanner(text, color, cb) {
@@ -2659,13 +2842,19 @@ class GameOverScene extends Phaser.Scene {
     if (!this.gamepad && this.input.gamepad.total > 0) this.gamepad = this.input.gamepad.getPad(0);
     const pad = this.gamepad && this.gamepad.connected ? this.gamepad : null;
     if (!pad) return;
-    this._padCool -= 16;
-    if (this._padCool > 0) return;
-    if (pad.up   || pad.leftStick.y < -0.4) { this.bumpLetter(1);  this._padCool = 200; }
-    if (pad.down || pad.leftStick.y >  0.4) { this.bumpLetter(25); this._padCool = 200; }
-    if (pad.left  || pad.leftStick.x < -0.4) { this.moveCursor(-1); this._padCool = 200; }
-    if (pad.right || pad.leftStick.x >  0.4) { this.moveCursor(1);  this._padCool = 200; }
-    if (pad.A || pad.start) { this.saveName(); this._padCool = 400; }
+    if (!this._nav) this._nav = {};
+    const up      = padNavStep(this._nav, 'up',    pad.up    || pad.leftStick.y < -0.5, delta, 450, 200);
+    const down    = padNavStep(this._nav, 'down',  pad.down  || pad.leftStick.y >  0.5, delta, 450, 200);
+    const left    = padNavStep(this._nav, 'left',  pad.left  || pad.leftStick.x < -0.5, delta, 450, 250);
+    const right   = padNavStep(this._nav, 'right', pad.right || pad.leftStick.x >  0.5, delta, 450, 250);
+    const confirm = padNavStep(this._nav, 'A',     pad.A || pad.start, delta); // edge only
+    // First frame just records buttons still held from the run that just ended
+    if (!this._navSeeded) { this._navSeeded = true; return; }
+    if (up)    this.bumpLetter(1);
+    if (down)  this.bumpLetter(25);
+    if (left)  this.moveCursor(-1);
+    if (right) this.moveCursor(1);
+    if (confirm) this.saveName();
   }
 }
 
@@ -2786,6 +2975,13 @@ function makeTextures(scene) {
   // Particle
   g.clear(); g.fillStyle(0xffffff); g.fillCircle(4,4,4);
   g.generateTexture('particle', 8, 8);
+
+  // Thruster flame — layered teardrop pointing down (scaled/flickered at runtime)
+  g.clear();
+  g.fillStyle(0xff5500, 0.85); g.fillTriangle(0, 0, 12, 0, 6, 22);
+  g.fillStyle(0xffaa00, 0.95); g.fillTriangle(2, 0, 10, 0, 6, 16);
+  g.fillStyle(0xffee99, 1);    g.fillTriangle(4, 0, 8, 0, 6, 10);
+  g.generateTexture('flame', 12, 22);
 
   // Stars
   makeStar(g, scene, 'stars1', 80, 1);

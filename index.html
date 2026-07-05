@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>EAser</title>
+  <title>Easing</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: #000011; width: 100%; height: 100%; overflow: hidden; cursor: none; }
@@ -61,7 +61,7 @@
 <body>
 <div id="preloader">
   <div class="stars" id="stars"></div>
-  <div class="logo"><span>EA</span>ser</div>
+  <div class="logo"><span>E</span>asing</div>
   <div class="sub">Galactic Assault</div>
   <div class="bar-wrap"><div class="bar" id="pbar"></div></div>
   <div class="loading-txt">Loading&hellip;</div>
@@ -69,6 +69,22 @@
 <div id="game"></div>
   <div id="err" style="color:#f55;font:14px monospace;padding:20px;position:fixed;top:0;left:0;z-index:9999;white-space:pre-wrap;display:none"></div>
   <script>
+    // ── Stale-cache self-heal ─────────────────────────────────────────────
+    // Some hosts serve a cached index.html no matter what headers we ask for.
+    // version.json is tiny and fetched with cache disabled; if its build number
+    // doesn't match the one baked into THIS file, we're a stale copy — reload
+    // once via a fresh query-string URL, which bypasses the cached HTML.
+    // On new releases bump BOTH: version.json and BUILD below.
+    var BUILD = '0.8';
+    fetch('version.json?ts=' + Date.now(), { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j.build !== BUILD && !location.search.includes('v=' + j.build)) {
+          location.replace(location.pathname + '?v=' + j.build);
+        }
+      })
+      .catch(function() {}); // offline/file:// — just play
+
     window.onerror = function(msg, src, line, col, err) {
       var d = document.getElementById('err');
       d.style.display = 'block';
