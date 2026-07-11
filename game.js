@@ -2,7 +2,7 @@
 
 const W = 480;
 const H = 640;
-const VERSION = 'V0.87';
+const VERSION = 'V0.9';
 
 // ─── Shared state across scenes ───────────────────────────────────────────────
 const State = {
@@ -10,8 +10,9 @@ const State = {
   score: 0,
   level: 1,
   lives: 3,
-  powerLevel: 0,    // 0-4 actual power tier
-  subPower: 0,      // 0-3 pickups within current tier before leveling up
+  powerLevel: 0,    // 0-10 upgrade level, driven by kills (essence), not pickups
+  essence: 0,       // progress within the current upgrade level
+  bombs: 3,         // stocked screen-clear bombs (C / pad X / mobile button)
   scores: [],       // highscore list [{name, score, level}]
 
   loadScores() {
@@ -24,6 +25,14 @@ const State = {
     localStorage.setItem('ddc_scores', JSON.stringify(this.scores));
   }
 };
+
+// ─── Upgrade progression ─────────────────────────────────────────────────────
+// 10 upgrade levels fed by kill essence. Every 2nd level unlocks the next of
+// the 5 weapon tiers the ships' fire() functions were designed around; every
+// level also shaves a little off the fire cooldown, so odd levels still matter.
+const MAX_POWER = 10;
+function essenceNeeded(level) { return 15 + level * 8; }
+function weaponTier() { return Math.min(4, Math.floor(State.powerLevel / 2)); }
 
 // ─── Music helper ─────────────────────────────────────────────────────────────
 let _music = null;
@@ -131,8 +140,9 @@ const SHIPS = [
 
 function spawnPlayerBullet(scene, x, y, angleDeg, speed) {
   const rad = Phaser.Math.DegToRad(angleDeg);
-  // Bullet art grows with power tier: 0-1 → thin, 2-3 → medium, 4 → wide
-  const tier = State.powerLevel >= 4 ? 2 : State.powerLevel >= 2 ? 1 : 0;
+  // Bullet art grows with weapon tier: 0-1 → thin, 2-3 → medium, 4 → wide
+  const wt = weaponTier();
+  const tier = wt >= 4 ? 2 : wt >= 2 ? 1 : 0;
   const key = 'pbullet' + tier;
   const b = scene.playerBullets.get(x, y, key);
   if (!b) return null;
@@ -1650,14 +1660,14 @@ function updateScrollLayers(scene, delta) {
 }
 
 // ─── Power-up types ───────────────────────────────────────────────────────────
-const POWERUP_TYPES       = ['power', 'power', 'power', 'power', 'bomb'];
-const POWERUP_TYPES_HEAVY = ['power', 'power', 'power', 'bomb',  'power', 'life'];
-// Per-level drop budget — early stages are lean (no bombs at all in stage 1),
-// later stages keep the full economy that the harder waves are tuned around
+// Power gems retired — upgrades are earned by kills (essence meter) now.
+// Drops are just bomb refills and the rare 1UP.
+const POWERUP_TYPES       = ['bomb'];
+const POWERUP_TYPES_HEAVY = ['bomb', 'bomb', 'life'];
 function puBudget(level) {
-  if (level === 1) return { power: 4, bomb: 0, life: 0 };
-  if (level === 2) return { power: 6, bomb: 2, life: 1 };
-  return { power: 8, bomb: 3, life: 1 };
+  if (level === 1) return { power: 0, bomb: 1, life: 0 };
+  if (level === 2) return { power: 0, bomb: 2, life: 1 };
+  return { power: 0, bomb: 2, life: 1 };
 }
 
 // Drops appear where the enemy died and tumble down from there
@@ -1911,7 +1921,7 @@ class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.pressZ, alpha: 0.25, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // Controls hint
-    this.add.text(W/2, H - 42, 'Z SHOOT   ·   X SLOW+LASER   ·   M MUTE   ·   F FULLSCREEN   ·   P PAUSE', {
+    this.add.text(W/2, H - 42, 'Z SHOOT  ·  X SLOW+LASER  ·  C BOMB  ·  M MUTE  ·  F FULLSCREEN  ·  P PAUSE', {
       font: '10px monospace', fill: '#7089a3',
     }).setOrigin(0.5).setDepth(6);
 
@@ -1981,12 +1991,13 @@ class ShipSelectScene extends Phaser.Scene {
       { key: '◀ ▶', label: 'MOVE' },
       { key: 'Z',   label: 'START / SHOOT' },
       { key: 'X',   label: 'SLOW + LASER' },
+      { key: 'C',   label: 'BOMB' },
       { key: 'M',   label: 'MUTE' },
       { key: 'F',   label: 'FULLSCREEN' },
       { key: 'P',   label: 'PAUSE' },
     ];
-    // Box width shrinks a bit as more controls are added, so the row keeps fitting W
-    const boxW = controls.length >= 6 ? 72 : 80, gap = 6;
+    // Box width shrinks as more controls are added, so the row keeps fitting W
+    const boxW = controls.length >= 7 ? 62 : controls.length >= 6 ? 72 : 80, gap = 5;
     const totalW = controls.length * boxW + (controls.length - 1) * gap;
     let cx = W / 2 - totalW / 2;
     const gy = this.add.graphics().setDepth(5);
@@ -2014,7 +2025,7 @@ class ShipSelectScene extends Phaser.Scene {
 
     const startGame = () => {
       State.ship = this.sel; State.score = 0; State.level = 1;
-      State.lives = 3; State.powerLevel = 0; State.subPower = 0;
+      State.lives = 3; State.powerLevel = 0; State.essence = 0; State.bombs = 3;
       this.scene.start('Game');
     };
     this.input.keyboard.on('keydown-LEFT',  () => { this.sel = (this.sel + SHIPS.length - 1) % SHIPS.length; this.highlight(); });
@@ -2112,7 +2123,7 @@ class ShipSelectScene extends Phaser.Scene {
     if (right) { this.sel = (this.sel + 1) % SHIPS.length; this.highlight(); }
     if (confirm) {
       State.ship = this.sel; State.score = 0; State.level = 1;
-      State.lives = 3; State.powerLevel = 0; State.subPower = 0;
+      State.lives = 3; State.powerLevel = 0; State.essence = 0; State.bombs = 3;
       this.scene.start('Game');
     }
   }
@@ -2237,6 +2248,16 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0x0055ff, 0.4); g.fillRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
       g.lineStyle(2, 0x4499ff, 0.9); g.strokeRoundedRect(this.laserZone.x, this.laserZone.y, btnW, btnH, 10);
       this.add.text(laserX, laserY, 'LASER', { font: 'bold 14px monospace', fill: '#88ccff' }).setOrigin(0.5).setDepth(29);
+      // Bomb button — slimmer, above the laser button; fires on touch-down
+      const bombH = 44;
+      const bombX = laserX, bombY = laserY - btnH/2 - bombH/2 - 10;
+      this.bombZone = new Phaser.Geom.Rectangle(bombX - btnW/2, bombY - bombH/2, btnW, bombH);
+      g.fillStyle(0xcc00cc, 0.35); g.fillRoundedRect(this.bombZone.x, this.bombZone.y, btnW, bombH, 10);
+      g.lineStyle(2, 0xff44ff, 0.9); g.strokeRoundedRect(this.bombZone.x, this.bombZone.y, btnW, bombH, 10);
+      this.add.text(bombX, bombY, 'BOMB', { font: 'bold 13px monospace', fill: '#ffaaff' }).setOrigin(0.5).setDepth(29);
+      this.input.on('pointerdown', p => {
+        if (this.bombZone.contains(p.x, p.y)) this.doBomb();
+      });
 
       // Fixed virtual joystick (bottom-left) — analog stick anchored to one spot,
       // instead of the ship chasing the raw finger position anywhere on screen
@@ -2278,6 +2299,9 @@ class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.input.keyboard.on('keydown-P', () => this.togglePause());
 
+    // Bomb — C key (doBomb's own cooldown absorbs key auto-repeat)
+    this.input.keyboard.on('keydown-C', () => this.doBomb());
+
     // Collisions — power-ups use manual distance check in update (avoids physics callback corruption)
     const ba = (a, b) => a.active && b.active;
     this.physics.add.overlap(this.playerBullets, this.enemies,  this.hitEnemy,  ba, this);
@@ -2292,9 +2316,25 @@ class GameScene extends Phaser.Scene {
     this.modeTxt   = this.add.text(W-8, 8, 'AUTO',           { font:'13px monospace', fill:'#4af' }).setOrigin(1,0).setDepth(20);
     this.muteTxt   = this.add.text(W-8, 24, '',              { font:'11px monospace', fill:'#888' }).setOrigin(1,0).setDepth(20);
     this.updateMuteLabel();
-    this.powerBar  = this.add.graphics().setDepth(20);
+    // Upgrade meter — vertical bar on the right that kill essence flies into
+    this.powerBar    = this.add.graphics().setDepth(20);
+    this.upMeterGlow = this.add.rectangle(W - 14, H / 2, 18, this.upMeterH || 380, 0xffd700, 0)
+      .setDepth(19).setBlendMode(Phaser.BlendModes.ADD);
+    this.upLabel     = this.add.text(W - 14, H - 46, 'P0', { font: 'bold 11px monospace', fill: '#ffd700' })
+      .setOrigin(0.5, 0).setDepth(20);
+    // Bomb stock icons (bottom-left)
+    this.bombIcons = [];
+    for (let i = 0; i < 3; i++) {
+      this.bombIcons.push(this.add.image(16 + i * 20, H - 16, 'gem_bomb', 0).setDepth(20).setScale(1.6));
+    }
     this.bossHPBar = this.add.graphics().setDepth(20);
     this.bossHPLabel = this.add.text(W/2, H-28, '', { font:'11px monospace', fill:'#f8f' }).setOrigin(0.5,0).setDepth(20);
+
+    // Runtime state for the new systems
+    this.feverTime = 0;
+    this.bombCooldown = 0;
+    this._afterimageTimer = 0;
+    this._prevPadX = false;
 
     this.updateHUD();
 
@@ -2308,11 +2348,37 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.gameOver || this.isPaused) return;
     this.invincible = Math.max(0, this.invincible - delta);
+    this.bombCooldown = Math.max(0, this.bombCooldown - delta);
+
+    // ── Fever mode tick ───────────────────────────────────────────────────
+    if (this.feverTime > 0) {
+      this.feverTime -= delta;
+      // rainbow ship tint
+      const hue = (time % 600) / 600;
+      const tint = Phaser.Display.Color.HSVToRGB(hue, 0.85, 1).color;
+      if (this.player && this.player.active) {
+        this.player.setTint(tint);
+        // trailing afterimages
+        this._afterimageTimer += delta;
+        if (this._afterimageTimer > 70) {
+          this._afterimageTimer = 0;
+          const g = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name)
+            .setScale(this.player.scaleX, this.player.scaleY).setAlpha(0.35).setTint(tint).setDepth(9);
+          this.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
+        }
+      }
+      this.drawPowerBar(); // live drain + colour cycle
+      if (this.feverTime <= 0) { // fever just ended
+        this.feverTime = 0;
+        if (this.player) this.player.clearTint();
+        this.drawPowerBar();
+      }
+    }
 
     updateScrollLayers(this, delta);
     if (this.bgStars)  this.bgStars.tilePositionY  -= 0.25;
     if (this.bgNebula) this.bgNebula.tilePositionY -= 0.08;
-    if (this.stars3)   this.stars3.tilePositionY   -= 2.5;
+    if (this.stars3)   this.stars3.tilePositionY   -= (this.feverTime > 0 ? 8 : 2.5); // hyperspeed during fever
 
     // Wave progression — guarded by wavesEnabled so the level banner
     // can't race with the first spawnWave call
@@ -2408,6 +2474,11 @@ class GameScene extends Phaser.Scene {
     if (!this.gamepad && this.input.gamepad.total > 0) this.gamepad = this.input.gamepad.getPad(0);
     const pad = this.gamepad && this.gamepad.connected ? this.gamepad : null;
 
+    // Bomb on pad X — edge-triggered so holding it doesn't chain-fire the stock
+    const padXDown = !!(pad && pad.X);
+    if (padXDown && !this._prevPadX) this.doBomb();
+    this._prevPadX = padXDown;
+
     // ── Movement ──────────────────────────────────────────────────────────
     // Anything that fires the laser also slows you down — including pad B
     const focused = this.focusKey.isDown || this.touchFocus || (pad && (pad.R2 > 0.3 || pad.B));
@@ -2498,19 +2569,21 @@ class GameScene extends Phaser.Scene {
 
   doShot() {
     if (this.shotCooldown > 0) return;
-    this.shotCooldown = this.ship.fireRate;
+    // Every upgrade level trims the cooldown a bit; fever mode nearly doubles fire rate
+    const rateScale = (1 - 0.03 * State.powerLevel) * (this.feverTime > 0 ? 0.55 : 1);
+    this.shotCooldown = this.ship.fireRate * rateScale;
     this.sound.play('sfx_shot', { volume: 0.4 });
-    this.ship.fire(this, this.player.x, this.player.y, State.powerLevel);
+    this.ship.fire(this, this.player.x, this.player.y, weaponTier());
   }
 
   doLaser() {
     if (this.laserCooldown > 0) return;
-    this.laserCooldown = 48;
+    this.laserCooldown = this.feverTime > 0 ? 30 : 48;
     this.sound.play('sfx_shot', { volume: 0.18 });
     // Laser looked like a devastating continuous beam but dealt weak per-tick
     // damage, especially once split across 2-3 parallel beams — kills lagged
     // well behind the visual, making it feel gimmicky rather than powerful
-    const damage = 6 + State.powerLevel * 2; // 6, 8, 10, 12, 14 (was 2, 2, 3, 3, 4)
+    const damage = 6 + weaponTier() * 2; // 6, 8, 10, 12, 14
     this.ship.laser(this, this.player.x, this.player.y, damage);
   }
 
@@ -2518,7 +2591,7 @@ class GameScene extends Phaser.Scene {
   // on the 48ms cooldown) — steady and bright instead of the old 1-in-3-frames flicker
   drawLaserBeam() {
     const px = this.player.x, py = this.player.y;
-    const pl = State.powerLevel; // 0-4
+    const pl = weaponTier(); // 0-4
     const coreW  = 5  + pl * 3;          // 5 → 17 px
     const glowW  = 14 + pl * 7;          // 14 → 42 px
     const glowCol = pl >= 3 ? 0xff2200 : pl >= 2 ? 0xff7700 : 0xffbb00;
@@ -2541,16 +2614,22 @@ class GameScene extends Phaser.Scene {
 
   hitEnemy(bullet, enemy) {
     if (enemy.invulnerable) { bullet.setActive(false).setVisible(false); return; }
-    const dmg = bullet.damage || 1;
+    const dmg = (bullet.damage || 1) + (this.feverTime > 0 ? 1 : 0); // fever: +1 on every hit
     enemy.hp -= dmg;
     bullet.setActive(false).setVisible(false);
 
     if (enemy.hp <= 0) {
-      State.score += enemy.points || 100;
+      // Fever mode doubles score for the whole rampage
+      State.score += (enemy.points || 100) * (this.feverTime > 0 ? 2 : 1);
       const ex = enemy.x, ey = enemy.y, sz = enemy.explodeSize || 'small';
       const wasBoss = enemy.isBoss;
       const wasMidBoss = enemy.isMidBoss;
       const isHeavy = wasBoss || enemy.isArmored; // read before destroy()
+      // Kill essence feeds the upgrade meter — heavier enemies are worth more
+      const bigArt = enemy.texture && (enemy.texture.key.startsWith('nship_') || enemy.texture.key.startsWith('eship_'));
+      const essence = wasBoss ? (wasMidBoss ? 15 : 25) : (isHeavy || bigArt) ? 3 : 1;
+      this.addEssence(essence);
+      this.spawnEssenceMotes(ex, ey, Math.min(essence, 6));
       // Endboss gets a battle-damaged wreck pose held briefly before the
       // explosion — read texture/scale now, before enemy.destroy() below
       const wasEndBoss = wasBoss && !wasMidBoss && enemy.texture && enemy.texture.key === 'boss_end';
@@ -2604,6 +2683,15 @@ class GameScene extends Phaser.Scene {
         this.sound.play('sfx_enemyhit', { volume: 0.7, rate: 0.85 });
       }
       this.cameras.main.shake(55, 0.004);
+      // Impact sparks where the bullet landed — makes hits feel physical
+      for (let i = 0; i < 2; i++) {
+        const s = this.add.image(bullet.x + Phaser.Math.Between(-4, 4), bullet.y + Phaser.Math.Between(-4, 4), 'particle')
+          .setDepth(12).setScale(0.5).setTint(0xffffcc).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({
+          targets: s, x: s.x + Phaser.Math.Between(-18, 18), y: s.y - Phaser.Math.Between(4, 16),
+          alpha: 0, scale: 0, duration: 140, onComplete: () => s.destroy()
+        });
+      }
       // Only kill the previous flash tween, not movement tweens
       if (enemy._flashTween) { enemy._flashTween.destroy(); enemy._flashTween = null; }
       enemy.setAlpha(1);
@@ -2618,14 +2706,10 @@ class GameScene extends Phaser.Scene {
     State.lives = this.lives;
     this.livesTxt.setText('♥'.repeat(Math.max(0, this.lives)));
     this.invincible = 2500;
-    // Drop one power tier on death
-    if (State.powerLevel > 0) {
-      State.powerLevel--;
-      State.subPower = 0;
-    } else {
-      State.subPower = Math.max(0, State.subPower - 1);
-    }
-    this.flashText(this.player.x, this.player.y - 45, '-POWER', '#ff6600');
+    // Getting hit drains part of the current level's meter — never a whole
+    // level, so a death sting stings without erasing minutes of progress
+    State.essence = Math.max(0, State.essence - Math.ceil(essenceNeeded(State.powerLevel) * 0.35));
+    this.flashText(this.player.x, this.player.y - 45, '-ENERGY', '#ff6600');
     this.drawPowerBar();
 
     // Dramatic hit feedback
@@ -2651,43 +2735,132 @@ class GameScene extends Phaser.Scene {
     const px = this.player.x, py = this.player.y;
     pu.destroy(); // safe — called from update, not from a physics callback
 
-    if (type === 'power') {
-      this.sound.play('sfx_powerup', { volume: 0.6 });
-      // Per-stage power ceiling: stage 1 caps at level 1, stage 2 at level 3,
-      // from stage 3 the full ladder is open — keeps early stages honest
-      const cap = State.level === 1 ? 1 : State.level === 2 ? 3 : 4;
-      if (State.powerLevel < cap) {
-        State.subPower++;
-        if (State.subPower >= 4) {
-          State.subPower = 0;
-          State.powerLevel = Math.min(State.powerLevel + 1, cap);
-          this.flashText(px, py - 20, 'POWER UP!', '#ff0');
-          this.cameras.main.flash(120, 255, 220, 0, false, null, null, 0.35);
-        } else {
-          this.flashText(px, py - 20, `PWR ${State.subPower}/4`, '#ffaa00');
-        }
-      } else {
-        State.score += 500; // capped for this stage — convert to points
-        this.flashText(px, py - 20, 'MAX +500', '#ff4400');
-      }
-    } else if (type === 'life') {
+    if (type === 'life') {
       this.lives = Math.min(this.lives + 1, 5);
       State.lives = this.lives;
       this.sound.play('sfx_powerup', { volume: 0.6 });
       this.flashText(px, py - 20, '1UP!', '#0f0');
     } else if (type === 'bomb') {
-      this.sound.play('sfx_bomb', { volume: 0.8 });
-      this.flashText(px, py - 20, 'BOMB!', '#0ff');
-      this.cameras.main.flash(300, 100, 200, 255);
-      this.enemyBullets.getChildren().forEach(b => b.setActive(false).setVisible(false));
-      this.enemies.getChildren().slice().forEach(e => {
-        if (!e.isBoss) { State.score += e.points || 100; this.spawnExplosion(e.x, e.y, 'small'); e.destroy(); }
-        else { e.hp = Math.max(1, e.hp - 30); }
-      });
-      // Reset pending counter so the wave check re-evaluates immediately
-      this.pendingSpawns = 0;
+      // Bombs are a stocked resource now — the gem refills the stock
+      this.sound.play('sfx_powerup', { volume: 0.6 });
+      if (State.bombs < 3) {
+        State.bombs++;
+        this.flashText(px, py - 20, '+BOMB', '#0ff');
+      } else {
+        State.score += 500;
+        this.flashText(px, py - 20, 'FULL +500', '#0ff');
+      }
     }
     this.updateHUD();
+  }
+
+  // ── Bombs / essence / fever ───────────────────────────────────────────────
+
+  doBomb() {
+    if (this.gameOver || this.isPaused) return;
+    if (State.bombs <= 0 || this.bombCooldown > 0) return;
+    State.bombs--;
+    this.bombCooldown = 900;
+    this.sound.play('sfx_bomb', { volume: 0.8 });
+    this.cameras.main.flash(300, 100, 200, 255);
+    this.cameras.main.shake(300, 0.02);
+    // Expanding shockwave ring from the ship
+    const wave = this.add.sprite(this.player.x, this.player.y, 'exp_wave').setDepth(15).setScale(1);
+    wave.play('exp_wave_anim');
+    this.tweens.add({ targets: wave, scale: 5, duration: 420 });
+    wave.once('animationcomplete', () => wave.destroy());
+    this.enemyBullets.getChildren().forEach(b => b.setActive(false).setVisible(false));
+    this.enemies.getChildren().slice().forEach(e => {
+      if (!e.isBoss) {
+        State.score += e.points || 100;
+        this.spawnExplosion(e.x, e.y, 'small');
+        if (e._parts) e._parts.forEach(p => p.destroy());
+        e.destroy();
+      }
+      else { e.hp = Math.max(1, e.hp - 30); }
+    });
+    // Reset pending counter so the wave check re-evaluates immediately
+    this.pendingSpawns = 0;
+    this.updateHUD();
+  }
+
+  // Kill essence → upgrade meter. Levels up (possibly several times), and at
+  // max level a full meter ignites fever mode instead.
+  addEssence(v) {
+    if (this.feverTime > 0) { State.score += v * 20; return; } // fever converts essence to score
+    State.essence += v;
+    let leveled = false;
+    while (State.powerLevel < MAX_POWER && State.essence >= essenceNeeded(State.powerLevel)) {
+      State.essence -= essenceNeeded(State.powerLevel);
+      State.powerLevel++;
+      leveled = true;
+    }
+    if (State.powerLevel >= MAX_POWER && State.essence >= essenceNeeded(MAX_POWER)) {
+      State.essence = 0;
+      this.startFever();
+    }
+    if (leveled) this.onLevelUp();
+    this.drawPowerBar();
+  }
+
+  onLevelUp() {
+    const tierUp = State.powerLevel % 2 === 0; // even levels unlock the next weapon tier
+    this.sound.play('sfx_powerup', { volume: 0.7, rate: tierUp ? 0.9 : 1.2 });
+    this.flashText(this.player.x, this.player.y - 40, tierUp ? 'WEAPON UPGRADE!' : 'POWER UP!', tierUp ? '#ffdd00' : '#ffaa00');
+    // Golden ring burst around the ship
+    const ring = this.add.sprite(this.player.x, this.player.y, 'exp_wave').setDepth(14)
+      .setScale(tierUp ? 1.4 : 0.9).setTint(0xffd700);
+    ring.play('exp_wave_anim');
+    ring.once('animationcomplete', () => ring.destroy());
+    if (tierUp) this.cameras.main.flash(140, 255, 220, 80, false, null, null, 0.3);
+  }
+
+  // Golden motes that fly from a kill to the upgrade meter — purely visual,
+  // the essence itself is banked instantly so nothing is lost mid-flight
+  spawnEssenceMotes(x, y, count) {
+    this._moteCount = this._moteCount || 0;
+    for (let i = 0; i < count; i++) {
+      if (this._moteCount >= 40) return; // cap concurrent motes under heavy fire
+      this._moteCount++;
+      const m = this.add.image(x, y, 'particle').setDepth(21)
+        .setScale(0.9).setTint(0xffd700).setBlendMode(Phaser.BlendModes.ADD);
+      // scatter outward briefly, then home to the meter
+      this.tweens.add({
+        targets: m,
+        x: x + Phaser.Math.Between(-26, 26), y: y + Phaser.Math.Between(-26, 26),
+        duration: 110,
+        onComplete: () => {
+          this.tweens.add({
+            targets: m, x: W - 14, y: Phaser.Math.Between(H * 0.35, H * 0.75),
+            scale: 0.4, duration: Phaser.Math.Between(280, 420), ease: 'Cubic.easeIn',
+            onComplete: () => {
+              this._moteCount--;
+              m.destroy();
+              if (this.upMeterGlow) { // little pulse where the mote lands
+                this.upMeterGlow.setAlpha(0.9);
+                this.tweens.add({ targets: this.upMeterGlow, alpha: 0, duration: 180 });
+              }
+            }
+          });
+        }
+      });
+    }
+  }
+
+  startFever() {
+    this.feverTime = 8000;
+    this.sound.play('sfx_powerup', { volume: 0.9, rate: 0.7 });
+    this.cameras.main.flash(250, 255, 120, 255, false, null, null, 0.4);
+    // Big punch-in FEVER banner
+    const t = this.add.text(W / 2, H / 2 - 60, 'FEVER!!', {
+      font: 'bold 52px monospace', fill: '#ff44ff', stroke: '#330033', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(31).setScale(0.2).setAlpha(0);
+    this.tweens.add({
+      targets: t, scale: 1, alpha: 1, duration: 240, ease: 'Back.easeOut',
+      onComplete: () => this.tweens.add({
+        targets: t, alpha: 0, y: t.y - 30, delay: 700, duration: 300, onComplete: () => t.destroy()
+      })
+    });
   }
 
   // ── Level flow ────────────────────────────────────────────────────────────
@@ -2831,35 +3004,53 @@ class GameScene extends Phaser.Scene {
     this.livesTxt.setText('♥'.repeat(Math.max(0, this.lives)));
     this.levelTxt.setText('LV ' + State.level);
     this.drawPowerBar();
+    this.drawBombStock();
   }
 
+  // Vertical upgrade meter on the right edge — fills bottom-up with kill
+  // essence; at max level it becomes the fever charge/drain gauge
   drawPowerBar() {
     this.powerBar.clear();
-    const x = 8, y = H - 18, w = 80, h = 6;
-    const segW = w / 4;
-    // Background
-    this.powerBar.fillStyle(0x222233);
-    this.powerBar.fillRect(x, y, w, h);
-    // Filled tier segments
-    for (let i = 0; i < State.powerLevel; i++) {
-      this.powerBar.fillStyle(0xffcc00);
-      this.powerBar.fillRect(x + i * segW + 1, y + 1, segW - 2, h - 2);
+    const w = 9, x = W - 14 - w / 2, top = 60, bottom = H - 52, h = bottom - top;
+    // Background + border
+    this.powerBar.fillStyle(0x10131f, 0.85);
+    this.powerBar.fillRect(x, top, w, h);
+    // Fill fraction: normal = essence progress; fever = time remaining
+    let frac, color;
+    if (this.feverTime > 0) {
+      frac = this.feverTime / 8000;
+      // colour cycles through hues during fever
+      color = Phaser.Display.Color.HSVToRGB((this.time.now % 600) / 600, 1, 1).color;
+    } else {
+      frac = Phaser.Math.Clamp(State.essence / essenceNeeded(State.powerLevel), 0, 1);
+      color = State.powerLevel >= MAX_POWER ? 0xff44ff : 0xffd700; // magenta = charging fever
     }
-    // Partial fill for current tier (sub-meter)
-    if (State.powerLevel < 4 && State.subPower > 0) {
-      this.powerBar.fillStyle(0xff8800);
-      this.powerBar.fillRect(x + State.powerLevel * segW + 1, y + 1, (State.subPower / 4) * segW - 2, h - 2);
+    const fh = h * frac;
+    if (fh > 0) {
+      this.powerBar.fillStyle(color, 1);
+      this.powerBar.fillRect(x + 1, bottom - fh, w - 2, fh);
+      // brighter tip so the fill level reads at a glance
+      this.powerBar.fillStyle(0xffffff, 0.9);
+      this.powerBar.fillRect(x + 1, bottom - fh, w - 2, Math.min(3, fh));
     }
-    // Segment dividers
-    this.powerBar.lineStyle(1, 0x556688);
-    for (let i = 1; i < 4; i++) {
+    // Level ticks every 10% for scale
+    this.powerBar.lineStyle(1, 0x33507a, 0.8);
+    for (let i = 1; i < 10; i++) {
       this.powerBar.beginPath();
-      this.powerBar.moveTo(x + i * segW, y);
-      this.powerBar.lineTo(x + i * segW, y + h);
+      this.powerBar.moveTo(x, top + (h * i) / 10);
+      this.powerBar.lineTo(x + 3, top + (h * i) / 10);
       this.powerBar.strokePath();
     }
     this.powerBar.lineStyle(1, 0x8888aa);
-    this.powerBar.strokeRect(x, y, w, h);
+    this.powerBar.strokeRect(x, top, w, h);
+    if (this.upLabel) {
+      this.upLabel.setText(this.feverTime > 0 ? '★' : State.powerLevel >= MAX_POWER ? 'MAX' : 'P' + State.powerLevel);
+      this.upLabel.setColor(this.feverTime > 0 || State.powerLevel >= MAX_POWER ? '#ff44ff' : '#ffd700');
+    }
+  }
+
+  drawBombStock() {
+    this.bombIcons.forEach((icon, i) => icon.setAlpha(i < State.bombs ? 1 : 0.18));
   }
 
   showBossHUD(boss) {

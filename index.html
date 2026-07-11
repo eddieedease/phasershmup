@@ -75,7 +75,7 @@
     // doesn't match the one baked into THIS file, we're a stale copy — reload
     // once via a fresh query-string URL, which bypasses the cached HTML.
     // On new releases bump BOTH: version.json and BUILD below.
-    var BUILD = '0.87';
+    var BUILD = '0.9';
     fetch('version.json?ts=' + Date.now(), { cache: 'no-store' })
       .then(function(r) { return r.json(); })
       .then(function(j) {
